@@ -1,0 +1,27 @@
+# Dexter Cyber — dependencies
+
+# Web backend (JARVIS-style UI served locally)
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+jinja2==3.1.5
+python-multipart==0.0.20
+
+# HTTP client for OpenRouter (OpenAI-compatible API)
+httpx==0.28.1
+
+# Config
+python-dotenv==1.0.1
+pydantic==2.10.4
+
+# Screen vision
+mss==9.0.2
+Pillow==11.1.0
+
+# Computer control (mouse / keyboard) — optional at runtime, gated by permissions
+pyautogui==0.9.54
+
+# Voice: text-to-speech (same engine family as the referenced J.A.R.V.I.S project)
+pyttsx3==2.98
+
+# Voice: speech-to-text (optional; wake-word + commands)
+SpeechRecognition==3.14.1

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dexter Cyber</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- ===== First-run consent overlay ===== -->
+    <div id="consent" class="overlay hidden">
+      <div class="consent-card">
+        <div class="consent-head">
+          <div class="reactor small"><span></span><span></span><span></span></div>
+          <div>
+            <h1>DEXTER<em>CYBER</em></h1>
+            <p class="tag">First-run authorization</p>
+          </div>
+        </div>
+        <p class="consent-intro">
+          Dexter can operate this computer on your behalf. Review the capabilities below and grant
+          the ones you are comfortable with. <strong>You are asked only once</strong> — your choice is
+          stored locally on this machine and can be changed anytime from Settings.
+        </p>
+        <div id="consent-list" class="cap-list"></div>
+        <div class="consent-actions">
+          <button id="consent-all" class="btn ghost">Select all</button>
+          <button id="consent-accept" class="btn primary">Authorize Dexter</button>
+        </div>
+        <p class="consent-foot">Nothing is sent anywhere except the OpenRouter AI brain you configured. No telemetry.</p>
+      </div>
+    </div>
+
+    <!-- ===== Settings drawer ===== -->
+    <div id="settings" class="overlay hidden">
+      <div class="settings-card">
+        <div class="settings-head">
+          <h2>Settings &amp; Permissions</h2>
+          <button id="settings-close" class="icon-btn">✕</button>
+        </div>
+        <div class="settings-body">
+          <div class="field">
+            <span class="field-label">AI brain (text)</span>
+            <span id="model-text" class="field-value">—</span>
+          </div>
+          <div class="field">
+            <span class="field-label">Vision model</span>
+            <span id="model-vision" class="field-value">—</span>
+          </div>
+          <div class="field">
+            <span class="field-label">API key</span>
+            <span id="api-status" class="field-value">—</span>
+          </div>
+          <h3>Capabilities</h3>
+          <div id="settings-caps" class="cap-list compact"></div>
+          <div class="settings-actions">
+            <button id="clear-memory" class="btn ghost">Clear memory</button>
+            <button id="reset-consent" class="btn danger">Revoke all &amp; re-ask</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Main HUD ===== -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="reactor tiny"><span></span><span></span><span></span></div>
+        <div class="brand-text">DEXTER<em>CYBER</em></div>
+      </div>
+      <div class="status">
+        <span id="conn-dot" class="dot"></span>
+        <span id="status-text">connecting…</span>
+        <button id="open-settings" class="icon-btn" title="Settings">⚙</button>
+      </div>
+    </header>
+
+    <main class="stage">
+      <section class="orb-wrap">
+        <div id="orb" class="reactor big">
+          <span></span><span></span><span></span>
+          <div class="core"></div>
+        </div>
+        <div id="waveform" class="waveform">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div id="orb-caption" class="orb-caption">Standing by.</div>
+      </section>
+
+      <section class="feed-wrap">
+        <div id="feed" class="feed"></div>
+      </section>
+    </main>
+
+    <footer class="composer">
+      <button id="mic" class="icon-btn mic" title="Voice input (browser speech)">🎙</button>
+      <input id="input" type="text" placeholder="Speak to Dexter…  (try: “take a look at my screen”)" autocomplete="off" />
+      <button id="send" class="btn primary">Send</button>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

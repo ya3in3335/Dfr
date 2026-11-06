@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Local config & secrets
+.env
+*.local
+
+# Dexter local data (consent, memory, logs live in ~/.dexter_cyber by default)
+.dexter_cyber/
+data/
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Screenshots captured during sessions
+screenshots/
+*.screenshot.png
