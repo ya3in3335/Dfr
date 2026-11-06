@@ -29,13 +29,15 @@ for pkg in ("uvicorn", "pyttsx3", "anyio", "httpx", "httpcore", "websockets", "c
 # --- Bundle the web UI and app assets (icon, etc.) ---
 datas = [("dexter/web", "dexter/web"), ("assets", "assets")]
 
-# --- Optional live mic-level support (sounddevice + its PortAudio lib) ---
+# --- Microphone capture (sounddevice + its bundled PortAudio library) ---
 binaries = []
+hidden += ["sounddevice", "_sounddevice", "cffi", "_cffi_backend", "speech_recognition"]
 try:
     from PyInstaller.utils.hooks import collect_dynamic_libs
     binaries += collect_dynamic_libs("sounddevice")
+    binaries += collect_dynamic_libs("_sounddevice_data")
     datas += collect_data_files("sounddevice")
-    hidden += ["sounddevice", "_sounddevice"]
+    datas += collect_data_files("_sounddevice_data")
 except Exception:
     pass
 

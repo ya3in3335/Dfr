@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
+from array import array
 from typing import Optional
 
 from PySide6.QtCore import QObject, QThread, Signal
@@ -94,10 +96,21 @@ class MicLevelMonitor(QThread):
 
 
 class WakeListener(QThread):
-    """Always-on background wake-word listener (optional; needs a microphone)."""
+    """Always-on background wake-word listener.
+
+    Captures the microphone continuously with ``sounddevice`` (no PyAudio
+    needed, so it works in the packaged app), recognises speech with Google,
+    and never stops on errors — it reopens the stream and keeps listening. Also
+    emits the live input level so the orb reacts to the mic.
+    """
 
     command = Signal(str)
-    state = Signal(str)   # "listening" | "heard" | "error" | "off"
+    state = Signal(str)     # "listening" | "heard" | "error" | "off"
+    level = Signal(float)   # live mic loudness 0..1
+
+    RATE = 16000
+    BLOCK = 1600            # 0.1s blocks
+    WINDOW_SEC = 3.0        # recognise every ~3s of audio
 
     def __init__(self, wake_word: str = "dexter"):
         super().__init__()
@@ -105,6 +118,7 @@ class WakeListener(QThread):
         self._stop = threading.Event()
         self._available = False
         try:
+            import sounddevice  # noqa: F401
             import speech_recognition  # noqa: F401
             self._available = True
         except Exception:
@@ -121,29 +135,51 @@ class WakeListener(QThread):
         if not self._available:
             self.state.emit("error")
             return
+        import sounddevice as sd
         import speech_recognition as sr
 
-        try:
-            rec = sr.Recognizer()
-            mic = sr.Microphone()
-            with mic as source:
-                rec.adjust_for_ambient_noise(source, duration=0.5)
-        except Exception:
-            self.state.emit("error")
-            return
+        rec = sr.Recognizer()
+        blocks_per_window = max(1, int(self.RATE * self.WINDOW_SEC / self.BLOCK))
 
-        self.state.emit("listening")
+        # Outer loop reopens the stream on any failure — it never gives up.
         while not self._stop.is_set():
             try:
-                with mic as source:
-                    audio = rec.listen(source, timeout=4, phrase_time_limit=8)
-                text = rec.recognize_google(audio)
+                with sd.RawInputStream(samplerate=self.RATE, blocksize=self.BLOCK,
+                                       channels=1, dtype="int16") as stream:
+                    self.state.emit("listening")
+                    buf = bytearray()
+                    n = 0
+                    peak = 0.0
+                    while not self._stop.is_set():
+                        data, _ = stream.read(self.BLOCK)
+                        b = bytes(data)
+                        buf += b
+                        n += 1
+                        # live level for the orb
+                        s = array("h"); s.frombytes(b)
+                        if s:
+                            rms = (sum(v * v for v in s) / len(s)) ** 0.5
+                            lvl = min(1.0, rms / 6000.0)
+                            peak = max(peak, lvl)
+                            self.level.emit(lvl)
+                        if n >= blocks_per_window:
+                            if peak > 0.06:                 # only recognise if there was sound
+                                try:
+                                    text = rec.recognize_google(sr.AudioData(bytes(buf), self.RATE, 2))
+                                except Exception:
+                                    text = ""
+                                if text:
+                                    low = text.lower()
+                                    if self.wake_word in low:
+                                        self.state.emit("heard")
+                                        cmd = text[low.index(self.wake_word) + len(self.wake_word):].strip(" ,.:;-")
+                                        if cmd:
+                                            self.command.emit(cmd)
+                            buf = bytearray(); n = 0; peak = 0.0
             except Exception:
-                continue
-            low = text.lower()
-            if self.wake_word in low:
-                self.state.emit("heard")
-                cmd = text[low.index(self.wake_word) + len(self.wake_word):].strip(" ,.:;-")
-                if cmd:
-                    self.command.emit(cmd)
+                self.state.emit("error")
+                for _ in range(15):                          # brief pause, then retry
+                    if self._stop.is_set():
+                        break
+                    time.sleep(0.1)
         self.state.emit("off")

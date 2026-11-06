@@ -26,5 +26,9 @@ pyautogui==0.9.54
 # Voice: text-to-speech (same engine family as the referenced J.A.R.V.I.S project)
 pyttsx3==2.98
 
-# Voice: speech-to-text (optional; wake-word + commands)
+# Voice: speech-to-text (always-on wake word + commands)
 SpeechRecognition==3.14.1
+
+# Microphone capture for the always-on wake word (no PyAudio needed; bundles
+# PortAudio in its wheels so it works in the packaged app)
+sounddevice==0.5.1
