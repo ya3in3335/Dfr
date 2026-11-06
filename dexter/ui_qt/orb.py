@@ -1,12 +1,13 @@
-"""The Dexter orb — a glossy 3D glass sphere rendered with QPainter (grayscale).
+"""The Dexter orb — a photoreal grayscale glass sphere drawn with QPainter.
 
-Looks like a real translucent glass bead: volumetric spherical shading, a glowing
-bottom core, a bright glass rim, and soft specular highlights. Inside, liquid
-ripples drift continuously — gently when idle, stronger when listening/speaking
-— so the orb always "undulates". Everything is drawn graphically (no images).
+Rendering pipeline (back → front) mimics how light behaves in a real glass bead:
+  halo → body volume + vertical shading → refractive caustic (bottom) → liquid
+  ripples → inner total-internal-reflection crescent → top ambient shadow →
+  Fresnel rim → specular reflections (soft key, sharp hotspot, faint fill).
 
-Public API: ``set_state``, ``set_caption``, ``set_level`` (audio reactive),
-``pulse`` (invoke burst).
+Everything is procedural (no textures). The liquid ripples drift continuously —
+subtle when idle, stronger when listening/speaking — and the caustic brightens
+with voice level, so the sphere always undulates and reacts.
 """
 from __future__ import annotations
 
@@ -14,7 +15,8 @@ import math
 import time
 
 from PySide6.QtCore import Qt, QTimer, QPointF, QRectF
-from PySide6.QtGui import QColor, QPainter, QPen, QRadialGradient, QPainterPath, QFont
+from PySide6.QtGui import (QColor, QLinearGradient, QPainter, QPen, QRadialGradient,
+                           QPainterPath, QFont)
 from PySide6.QtWidgets import QWidget
 
 CAPTIONS = {
@@ -23,7 +25,6 @@ CAPTIONS = {
     "thinking": "Processing …",
     "speaking": "Speaking …",
 }
-# idle is intentionally non-zero so the glass keeps rippling even when silent.
 TARGET = {"idle": 0.28, "listening": 0.75, "thinking": 0.55, "speaking": 0.95}
 
 
@@ -46,10 +47,7 @@ class OrbWidget(QWidget):
     def set_state(self, state: str):
         self._state = state
         self._target = TARGET.get(state, 0.28)
-        if state != "speaking":
-            self._caption = CAPTIONS.get(state, self._caption)
-        else:
-            self._caption = CAPTIONS["speaking"]
+        self._caption = CAPTIONS.get(state, self._caption)
         self.update()
 
     def set_caption(self, text: str):
@@ -88,21 +86,25 @@ class OrbWidget(QWidget):
         sphere.addEllipse(QPointF(cx, cy), Rs, Rs)
 
         self._body(p, cx, cy, Rs, sphere)
-        self._bottom_glow(p, cx, cy, Rs, sphere)
+        self._vertical_shade(p, cx, cy, Rs, sphere)
+        self._caustic(p, cx, cy, Rs, sphere)
         self._ripples(p, cx, cy, Rs, sphere)
-        self._rim(p, cx, cy, Rs)
+        self._inner_crescent(p, cx, cy, Rs, sphere)
+        self._top_shadow(p, cx, cy, Rs, sphere)
+        self._fresnel_rim(p, cx, cy, Rs)
         self._speculars(p, cx, cy, Rs, sphere)
 
         self._caption_text(p, cx, cy + Rs + min(w, h) * 0.035, Rs * 2)
         p.end()
 
+    # ---- individual layers -------------------------------------------------
     def _halo(self, p, cx, cy, Rs):
-        g = QRadialGradient(cx, cy, Rs * 1.35)
-        a = int(28 + 55 * self._intensity)
-        g.setColorAt(0.6, QColor(190, 196, 206, a))
+        g = QRadialGradient(cx, cy, Rs * 1.4)
+        a = int(26 + 55 * self._intensity)
+        g.setColorAt(0.62, QColor(188, 196, 208, a))
         g.setColorAt(1.0, QColor(0, 0, 0, 0))
         p.setPen(Qt.NoPen); p.setBrush(g)
-        p.drawEllipse(QPointF(cx, cy), Rs * 1.32, Rs * 1.32)
+        p.drawEllipse(QPointF(cx, cy), Rs * 1.36, Rs * 1.36)
 
     def _pulse_rings(self, p, cx, cy, Rs):
         now = time.monotonic()
@@ -110,84 +112,113 @@ class OrbWidget(QWidget):
             prog = (now - t) / 1.2
             if 0 <= prog <= 1:
                 rr = Rs * (1.0 + prog * 0.45)
-                pen = QPen(QColor(235, 238, 242, int(150 * (1 - prog))))
-                pen.setWidthF(2.0)
-                p.setPen(pen); p.setBrush(Qt.NoBrush)
+                pen = QPen(QColor(235, 238, 242, int(140 * (1 - prog))))
+                pen.setWidthF(1.8); p.setPen(pen); p.setBrush(Qt.NoBrush)
                 p.drawEllipse(QPointF(cx, cy), rr, rr)
 
     def _body(self, p, cx, cy, Rs, sphere):
-        # volumetric sphere shading — translucent, darker at the top/edges
-        g = QRadialGradient(cx, cy - Rs * 0.22, Rs * 1.18)
-        g.setColorAt(0.0, QColor(150, 155, 163, 180))
-        g.setColorAt(0.55, QColor(92, 96, 104, 175))
-        g.setColorAt(0.85, QColor(42, 44, 50, 205))
-        g.setColorAt(1.0, QColor(16, 17, 20, 235))
+        # volume: lit from upper-left, falling off to a darker translucent edge
+        g = QRadialGradient(cx - Rs * 0.28, cy - Rs * 0.30, Rs * 1.45)
+        g.setColorAt(0.0, QColor(168, 173, 181, 185))
+        g.setColorAt(0.45, QColor(108, 113, 121, 180))
+        g.setColorAt(0.80, QColor(52, 55, 62, 200))
+        g.setColorAt(0.97, QColor(26, 27, 32, 230))
+        g.setColorAt(1.0, QColor(14, 15, 18, 240))
         p.setPen(Qt.NoPen); p.setBrush(g)
         p.drawPath(sphere)
 
-    def _bottom_glow(self, p, cx, cy, Rs, sphere):
-        # the glowing light core near the bottom (brightens with intensity)
+    def _vertical_shade(self, p, cx, cy, Rs, sphere):
+        # darker top, lighter bottom (transmitted light) — subtle
         p.save(); p.setClipPath(sphere)
-        k = 0.45 + 0.55 * self._intensity
-        g = QRadialGradient(cx, cy + Rs * 0.42, Rs * 1.05)
-        g.setColorAt(0.0, QColor(235, 238, 243, int(210 * k)))
-        g.setColorAt(0.35, QColor(170, 175, 183, int(110 * k)))
-        g.setColorAt(0.8, QColor(90, 94, 102, 0))
+        g = QLinearGradient(cx, cy - Rs, cx, cy + Rs)
+        g.setColorAt(0.0, QColor(8, 9, 12, 95))
+        g.setColorAt(0.5, QColor(0, 0, 0, 0))
+        g.setColorAt(1.0, QColor(235, 238, 243, int(55 + 55 * self._intensity)))
+        p.setPen(Qt.NoPen); p.setBrush(g); p.drawPath(sphere)
+        p.restore()
+
+    def _caustic(self, p, cx, cy, Rs, sphere):
+        # focused bright spot where light converges through the glass (bottom)
+        p.save(); p.setClipPath(sphere)
+        k = 0.5 + 0.5 * self._intensity
+        g = QRadialGradient(cx + Rs * 0.05, cy + Rs * 0.46, Rs * 0.7)
+        g.setColorAt(0.0, QColor(248, 250, 253, int(230 * k)))
+        g.setColorAt(0.28, QColor(205, 210, 218, int(120 * k)))
+        g.setColorAt(0.7, QColor(120, 125, 133, 0))
         g.setColorAt(1.0, QColor(0, 0, 0, 0))
-        p.setPen(Qt.NoPen); p.setBrush(g)
-        p.drawPath(sphere)
+        p.setPen(Qt.NoPen); p.setBrush(g); p.drawPath(sphere)
         p.restore()
 
     def _ripples(self, p, cx, cy, Rs, sphere):
-        # soft liquid waves drifting through the lower half of the glass
         p.save(); p.setClipPath(sphere)
         lines = 7
-        drift = math.sin(self._phase * 0.5) * Rs * 0.04   # whole body sloshes
+        drift = math.sin(self._phase * 0.5) * Rs * 0.035
         for i in range(lines):
-            fy = -0.12 + (i / (lines - 1)) * 0.62          # biased to lower half
+            fy = -0.10 + (i / (lines - 1)) * 0.60
             yc = cy + fy * Rs + drift
             fade = 1 - max(0.0, fy) * 0.5
-            amp = Rs * (0.045 + 0.075 * self._intensity) * fade
-            alpha = int(255 * (0.035 + 0.055 * fade))
-            pen = QPen(QColor(228, 232, 238, max(8, alpha)))
-            pen.setWidthF(1.6); pen.setCapStyle(Qt.RoundCap); p.setPen(pen)
+            amp = Rs * (0.035 + 0.07 * self._intensity) * fade
+            alpha = int(255 * (0.028 + 0.05 * fade))
+            pen = QPen(QColor(230, 234, 240, max(7, alpha)))
+            pen.setWidthF(1.5); pen.setCapStyle(Qt.RoundCap); p.setPen(pen)
             path = QPainterPath(); steps = 90
             for s in range(steps + 1):
                 t = s / steps
                 x = cx - Rs + t * 2 * Rs
-                env = math.sin(math.pi * t) ** 1.3         # fade at the sides
+                env = math.sin(math.pi * t) ** 1.3
                 y = yc + math.sin(t * 7 + self._phase + fy * 2.2) * amp * env \
                        + math.sin(t * 3.3 - self._phase * 0.6) * amp * 0.45 * env
                 path.moveTo(x, y) if s == 0 else path.lineTo(x, y)
             p.drawPath(path)
         p.restore()
 
-    def _rim(self, p, cx, cy, Rs):
-        # bright glass rim around the circumference
+    def _inner_crescent(self, p, cx, cy, Rs, sphere):
+        # total internal reflection — a bright crescent hugging the lower rim
+        p.save(); p.setClipPath(sphere)
+        g = QRadialGradient(cx, cy - Rs * 0.48, Rs * 1.6)
+        g.setColorAt(0.0, QColor(255, 255, 255, 0))
+        g.setColorAt(0.86, QColor(235, 239, 244, 0))
+        g.setColorAt(0.93, QColor(236, 240, 245, 150))
+        g.setColorAt(0.985, QColor(252, 253, 255, 215))
+        g.setColorAt(1.0, QColor(255, 255, 255, 0))
+        p.setPen(Qt.NoPen); p.setBrush(g); p.drawPath(sphere)
+        p.restore()
+
+    def _top_shadow(self, p, cx, cy, Rs, sphere):
+        # faint ambient darkening of the upper interior for depth
+        p.save(); p.setClipPath(sphere)
+        g = QRadialGradient(cx, cy - Rs * 0.62, Rs * 0.95)
+        g.setColorAt(0.0, QColor(6, 7, 10, 120))
+        g.setColorAt(0.7, QColor(6, 7, 10, 0))
+        p.setPen(Qt.NoPen); p.setBrush(g); p.drawPath(sphere)
+        p.restore()
+
+    def _fresnel_rim(self, p, cx, cy, Rs):
+        # thin very bright edge, strongest top & bottom (Fresnel)
         g = QRadialGradient(cx, cy, Rs)
         g.setColorAt(0.0, QColor(255, 255, 255, 0))
-        g.setColorAt(0.82, QColor(200, 205, 212, 0))
-        g.setColorAt(0.9, QColor(210, 215, 222, 70))
-        g.setColorAt(0.965, QColor(240, 243, 247, 180))
-        g.setColorAt(1.0, QColor(255, 255, 255, 25))
+        g.setColorAt(0.9, QColor(210, 215, 223, 0))
+        g.setColorAt(0.955, QColor(224, 229, 236, 90))
+        g.setColorAt(0.99, QColor(250, 252, 255, 210))
+        g.setColorAt(1.0, QColor(255, 255, 255, 30))
         p.setPen(Qt.NoPen); p.setBrush(g)
         p.drawEllipse(QPointF(cx, cy), Rs, Rs)
 
     def _speculars(self, p, cx, cy, Rs, sphere):
         p.save(); p.setClipPath(sphere)
-        # large soft highlight, upper area
-        self._blob(p, cx - Rs * 0.18, cy - Rs * 0.52, Rs * 0.62, Rs * 0.34, -18, 185)
-        # secondary highlight, upper right
-        self._blob(p, cx + Rs * 0.34, cy - Rs * 0.34, Rs * 0.26, Rs * 0.5, 28, 120)
-        # tiny crisp hotspot
-        self._blob(p, cx - Rs * 0.28, cy - Rs * 0.44, Rs * 0.12, Rs * 0.09, 0, 230)
+        # soft key reflection (studio softbox), upper area
+        self._blob(p, cx - Rs * 0.20, cy - Rs * 0.50, Rs * 0.58, Rs * 0.30, -16, 150)
+        # faint, very diffuse environment fill, upper right
+        self._blob(p, cx + Rs * 0.38, cy - Rs * 0.28, Rs * 0.30, Rs * 0.52, 26, 38)
+        # crisp hotspot
+        self._blob(p, cx - Rs * 0.30, cy - Rs * 0.44, Rs * 0.085, Rs * 0.06, 0, 255)
         p.restore()
 
     def _blob(self, p, x, y, rx, ry, rot, alpha):
         p.save(); p.translate(x, y); p.rotate(rot)
         g = QRadialGradient(0, 0, max(rx, ry))
         g.setColorAt(0.0, QColor(255, 255, 255, alpha))
-        g.setColorAt(0.5, QColor(245, 247, 250, int(alpha * 0.4)))
+        g.setColorAt(0.5, QColor(246, 248, 251, int(alpha * 0.38)))
         g.setColorAt(1.0, QColor(255, 255, 255, 0))
         p.setPen(Qt.NoPen); p.setBrush(g)
         p.scale(1.0, ry / rx if rx else 1.0)
