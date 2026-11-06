@@ -18,7 +18,7 @@ from . import icons
 from .orb import OrbWidget
 from .settings_dialog import SettingsDialog
 from .theme import CYAN, DANGER, INK, INK_DIM, OK, QSS, WARN
-from .worker import AsyncLoop, Bridge, WakeListener
+from .worker import AsyncLoop, Bridge, MicLevelMonitor, WakeListener
 
 ACCENT = {"cyan": CYAN, "green": OK, "amber": WARN, "red": DANGER}
 TASK_COLOR = {"pending": INK_DIM, "active": CYAN, "done": OK, "failed": DANGER}
@@ -64,6 +64,7 @@ class DexterWindow(QWidget):
         self.bridge = Bridge()
         self.bridge.event.connect(self.on_event)
         self.wake = None
+        self.mic_monitor = None
         self.cards = {}
         self.tasks = {}
         self.player = None
@@ -81,7 +82,7 @@ class DexterWindow(QWidget):
 
         # top bar
         top = QHBoxLayout(); top.setContentsMargins(18, 12, 18, 12)
-        brand = QLabel('DEXTER <span id="x" style="color:#35e4ff;">CYBER</span>')
+        brand = QLabel('DEXTER <span style="color:#868b93;">CYBER</span>')
         brand.setObjectName("brand"); brand.setTextFormat(Qt.RichText)
         top.addWidget(brand)
         self.status = QLabel("offline"); self.status.setObjectName("hint")
@@ -137,7 +138,7 @@ class DexterWindow(QWidget):
         return w
 
     def _scroll(self):
-        area = QScrollArea(); area.setWidgetResizable(True); area.setFrameShape(QFrame.NoShape)
+        area = QScrollArea(); area.setWidgetResizable(True); area.setFrameShape(QFrame.Shape.NoFrame)
         inner = QWidget(); lay = QVBoxLayout(inner); lay.setContentsMargins(4, 4, 4, 4)
         lay.setSpacing(8); lay.addStretch(1)
         area.setWidget(inner)
@@ -159,6 +160,7 @@ class DexterWindow(QWidget):
             return
         self.input.clear()
         self.add_message("user", text)
+        self.orb.pulse()  # invoke animation
         self.loop.submit(self.assistant.process(text, self._emit))
 
     async def _emit(self, ev: dict):
@@ -171,23 +173,39 @@ class DexterWindow(QWidget):
 
     def _toggle_wake(self):
         if self.wake and self.wake.isRunning():
-            self.wake.stop(); self.wake = None
-            self.wake_btn.setChecked(False); self.wake_btn.setText("  Wake: off")
+            self._stop_wake()
             return
         self.wake = WakeListener(self.assistant.state().get("wake_word", "dexter"))
         if not self.wake.available:
             self.add_trace("Microphone/SpeechRecognition not available for background listening.", True)
             self.wake = None; self.wake_btn.setChecked(False); return
-        self.wake.command.connect(lambda c: self._send(c))
+        self.wake.command.connect(self._on_wake_command)
         self.wake.state.connect(self._wake_state)
         self.wake.start()
+        # live mic-level animation (optional; graceful if sounddevice is absent)
+        self.mic_monitor = MicLevelMonitor()
+        self.mic_monitor.level.connect(self.orb.set_level)
+        self.mic_monitor.start()
         self.wake_btn.setChecked(True); self.wake_btn.setText("  Wake: on")
+        self.orb.set_state("listening")
+
+    def _stop_wake(self):
+        if self.wake:
+            self.wake.stop(); self.wake = None
+        if self.mic_monitor:
+            self.mic_monitor.stop(); self.mic_monitor = None
+        self.wake_btn.setChecked(False); self.wake_btn.setText("  Wake: off")
+        self.orb.set_state("idle")
+
+    def _on_wake_command(self, cmd: str):
+        self.orb.pulse()  # invoke animation on wake
+        self._send(cmd)
 
     def _wake_state(self, s: str):
         if s == "listening":
             self.orb.set_state("listening")
         elif s == "heard":
-            self.orb.set_state("thinking")
+            self.orb.pulse(); self.orb.set_state("thinking")
         elif s in ("off", "error"):
             self.orb.set_state("idle")
 
@@ -315,7 +333,7 @@ class DexterWindow(QWidget):
                 self.player.setAudioOutput(self._audio_out)
                 self.player.playbackStateChanged.connect(
                     lambda s: self.orb.set_state("idle")
-                    if s == QMediaPlayer.StoppedState else None)
+                    if s == QMediaPlayer.PlaybackState.StoppedState else None)
             self._audio_out.setVolume(1.0)
             self.player.setSource(QUrl.fromLocalFile(str(tmp)))
             self.orb.set_state("speaking")
@@ -327,6 +345,8 @@ class DexterWindow(QWidget):
         try:
             if self.wake:
                 self.wake.stop()
+            if self.mic_monitor:
+                self.mic_monitor.stop()
             self.loop.stop()
         except Exception:
             pass
@@ -346,7 +366,7 @@ def main() -> int:
     if not assistant.permissions.has_consented:
         dlg = ConsentDialog(assistant)
         dlg.setStyleSheet(QSS)
-        if dlg.exec() != QDialog.Accepted:
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return 0
 
     win = DexterWindow(assistant, loop)

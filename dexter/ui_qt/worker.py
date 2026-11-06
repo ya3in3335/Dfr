@@ -43,6 +43,56 @@ class AsyncLoop(QThread):
             self.loop.call_soon_threadsafe(self.loop.stop)
 
 
+class MicLevelMonitor(QThread):
+    """Emits the live microphone loudness (0..1) so the orb reacts to sound.
+
+    Uses ``sounddevice`` if available (optional dependency). If it is not
+    installed, the thread simply exits and the orb falls back to its synthetic
+    listening animation.
+    """
+
+    level = Signal(float)
+
+    def __init__(self):
+        super().__init__()
+        self._stop = threading.Event()
+
+    def stop(self):
+        self._stop.set()
+
+    def run(self):
+        try:
+            import sounddevice as sd
+        except Exception:
+            return
+        import array
+
+        block = 1024
+        rate = 16000
+        try:
+            stream = sd.RawInputStream(samplerate=rate, blocksize=block,
+                                       channels=1, dtype="int16")
+            stream.start()
+        except Exception:
+            return
+        try:
+            while not self._stop.is_set():
+                data, _ = stream.read(block)
+                samples = array.array("h")
+                samples.frombytes(bytes(data))
+                if not samples:
+                    continue
+                rms = (sum(s * s for s in samples) / len(samples)) ** 0.5
+                self.level.emit(min(1.0, rms / 6000.0))  # ~normalise to 0..1
+        except Exception:
+            pass
+        finally:
+            try:
+                stream.stop(); stream.close()
+            except Exception:
+                pass
+
+
 class WakeListener(QThread):
     """Always-on background wake-word listener (optional; needs a microphone)."""
 

@@ -29,6 +29,16 @@ for pkg in ("uvicorn", "pyttsx3", "anyio", "httpx", "httpcore", "websockets", "c
 # --- Bundle the web UI and app assets (icon, etc.) ---
 datas = [("dexter/web", "dexter/web"), ("assets", "assets")]
 
+# --- Optional live mic-level support (sounddevice + its PortAudio lib) ---
+binaries = []
+try:
+    from PyInstaller.utils.hooks import collect_dynamic_libs
+    binaries += collect_dynamic_libs("sounddevice")
+    datas += collect_data_files("sounddevice")
+    hidden += ["sounddevice", "_sounddevice"]
+except Exception:
+    pass
+
 # Optional custom icon (place assets/dexter.ico in the repo to use it).
 _icon_path = Path("assets/dexter.ico")
 icon = str(_icon_path) if _icon_path.exists() else None
@@ -38,7 +48,7 @@ block_cipher = None
 a = Analysis(
     ["run.py"],
     pathex=[],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hidden,
     hookspath=[],

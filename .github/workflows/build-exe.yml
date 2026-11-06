@@ -48,6 +48,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
 
+      - name: Install optional mic-level support (best effort)
+        run: python -m pip install sounddevice
+        continue-on-error: true
+
       - name: Build executable
         run: python -m PyInstaller --noconfirm dexter_cyber.spec
 

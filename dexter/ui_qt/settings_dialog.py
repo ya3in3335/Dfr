@@ -38,7 +38,7 @@ class SettingsDialog(QDialog):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoShape)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         body = QWidget()
         form = QVBoxLayout(body)
         form.setSpacing(10)
@@ -123,11 +123,11 @@ class SettingsDialog(QDialog):
 
     def _secret_field(self, value: str) -> QLineEdit:
         e = QLineEdit(value)
-        e.setEchoMode(QLineEdit.Password)
+        e.setEchoMode(QLineEdit.EchoMode.Password)
         e.setPlaceholderText("paste key…")
-        show = e.addAction(icons.icon("eye", 16, INK_DIM), QLineEdit.TrailingPosition)
+        show = e.addAction(icons.icon("eye", 16, INK_DIM), QLineEdit.ActionPosition.TrailingPosition)
         show.triggered.connect(lambda: e.setEchoMode(
-            QLineEdit.Normal if e.echoMode() == QLineEdit.Password else QLineEdit.Password))
+            QLineEdit.EchoMode.Normal if e.echoMode() == QLineEdit.EchoMode.Password else QLineEdit.EchoMode.Password))
         return e
 
     def _save(self):
