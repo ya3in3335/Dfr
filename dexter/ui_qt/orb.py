@@ -1,12 +1,13 @@
-"""The Dexter orb — a turbulent particle ring rendered with QPainter.
+"""The Dexter orb — a fine, dense particle ring with mood-driven motion.
 
-Hundreds of small glowing points form a ring whose radius is displaced by
-travelling waves + per-particle turbulence, so the ring churns organically.
-It rotates slowly and undulates gently when idle, and churns much harder when
-listening / speaking (audio reactive). Drawn additively on black for a bloom
-glow — no textures.
+Thousands of tiny points sit on a very thin ring (nanometre-fine look). The
+ring's motion changes with Dexter's "mood": calm, listening, thinking, speaking,
+happy, alert — each a distinct animation (rotation speed, wave lobes, amplitude,
+thickness, spray, brightness, breathing). Moods ease into one another smoothly,
+and audio level / pulses modulate the current mood. Drawn additively on black.
 
-Public API: ``set_state``, ``set_caption``, ``set_level``, ``pulse``.
+Public API: ``set_state``, ``set_mood``, ``flash_mood``, ``set_caption``,
+``set_level``, ``pulse``.
 """
 from __future__ import annotations
 
@@ -24,13 +25,22 @@ CAPTIONS = {
     "thinking": "Processing …",
     "speaking": "Speaking …",
 }
-TARGET = {"idle": 0.22, "listening": 0.8, "thinking": 0.55, "speaking": 0.95}
 
-# Particle glow color (cool teal, like the reference). Tweak here to recolor.
-C_R, C_G, C_B = 120, 224, 232
+# Each mood is a distinct animation personality.
+# spin: rotation speed · amp: wave height · lobes: wave count · thick: band width
+# spray: outward wisp strength · bright: glow · breath: in/out breathing
+MOODS = {
+    "calm":      dict(spin=0.07, amp=0.018, lobes=2.0, thick=0.020, spray=0.5, bright=0.85, breath=0.012),
+    "listening": dict(spin=0.12, amp=0.045, lobes=3.0, thick=0.045, spray=0.9, bright=1.05, breath=0.020),
+    "thinking":  dict(spin=0.55, amp=0.040, lobes=5.0, thick=0.060, spray=1.2, bright=1.00, breath=0.010),
+    "speaking":  dict(spin=0.16, amp=0.110, lobes=4.0, thick=0.075, spray=1.4, bright=1.15, breath=0.016),
+    "happy":     dict(spin=0.30, amp=0.075, lobes=6.0, thick=0.055, spray=1.7, bright=1.25, breath=0.022),
+    "alert":     dict(spin=0.02, amp=0.030, lobes=9.0, thick=0.035, spray=0.8, bright=1.10, breath=0.006),
+}
+STATE_MOOD = {"idle": "calm", "listening": "listening", "thinking": "thinking", "speaking": "speaking"}
 
-LAYERS = 12
-PER_LAYER = 250
+C_R, C_G, C_B = 120, 224, 232          # cool teal glow
+N_PARTICLES = 2300
 
 
 class OrbWidget(QWidget):
@@ -38,10 +48,14 @@ class OrbWidget(QWidget):
         super().__init__(parent)
         self.setMinimumSize(320, 320)
         self._phase = 0.0
-        self._intensity = 0.22
-        self._target = 0.22
+        self._rot = 0.0
+        self._intensity = 0.25
+        self._target = 0.25
         self._level = 0.0
         self._state = "idle"
+        self._mood = "calm"
+        self._flash = None            # (mood, until_ts)
+        self._p = dict(MOODS["calm"])  # current (eased) params
         self._caption = CAPTIONS["idle"]
         self._pulses: list[float] = []
         self._particles = self._build_particles()
@@ -50,33 +64,41 @@ class OrbWidget(QWidget):
         self._timer.start(16)
 
     def _build_particles(self):
-        rnd = random.Random(7)
+        rnd = random.Random(11)
         parts = []
-        for l in range(LAYERS):
-            for i in range(PER_LAYER):
-                a0 = (i / PER_LAYER) * 2 * math.pi + rnd.uniform(-0.03, 0.03)
-                parts.append({
-                    "l": l,
-                    "a": a0,
-                    "ph": rnd.uniform(0, 2 * math.pi),
-                    "jit": rnd.uniform(-1, 1),
-                    "spray": rnd.random() < 0.14,
-                    "sz": rnd.uniform(0.6, 1.4),
-                    "b": rnd.uniform(0.45, 1.0),
-                    "sp": rnd.uniform(0.8, 1.4),   # per-particle wave speed
-                })
+        for i in range(N_PARTICLES):
+            # gaussian radial offset keeps most points on a thin line
+            rf = max(-1.0, min(1.0, rnd.gauss(0, 0.5)))
+            parts.append({
+                "a": rnd.uniform(0, 2 * math.pi),
+                "rf": rf,
+                "ph": rnd.uniform(0, 2 * math.pi),
+                "jit": rnd.uniform(-1, 1),
+                "spray": rnd.random() < 0.10,
+                "sz": rnd.uniform(0.5, 1.15),
+                "b": rnd.uniform(0.5, 1.0),
+                "sp": rnd.uniform(0.8, 1.3),
+            })
         return parts
 
     # -- public API ----------------------------------------------------------
     def set_state(self, state: str):
         self._state = state
-        self._target = TARGET.get(state, 0.22)
+        self._mood = STATE_MOOD.get(state, self._mood)
+        self._target = {"idle": 0.25, "listening": 0.8, "thinking": 0.6, "speaking": 0.95}.get(state, 0.25)
         self._caption = CAPTIONS.get(state, self._caption)
-        self.update()
+
+    def set_mood(self, mood: str):
+        if mood in MOODS:
+            self._mood = mood
+
+    def flash_mood(self, mood: str, seconds: float = 2.0):
+        """Briefly express a feeling (e.g. happy / alert), then revert."""
+        if mood in MOODS:
+            self._flash = (mood, time.monotonic() + seconds)
 
     def set_caption(self, text: str):
         self._caption = text
-        self.update()
 
     def set_level(self, level: float):
         self._level = max(self._level * 0.6, min(1.0, level))
@@ -86,23 +108,35 @@ class OrbWidget(QWidget):
         self._target = max(self._target, 0.95)
 
     # -- animation -----------------------------------------------------------
+    def _active_mood(self) -> str:
+        if self._flash:
+            mood, until = self._flash
+            if time.monotonic() < until:
+                return mood
+            self._flash = None
+        return self._mood
+
     def _tick(self):
+        tgt = MOODS[self._active_mood()]
+        for k, v in tgt.items():
+            self._p[k] += (v - self._p[k]) * 0.07     # smooth mood transitions
         reactive = max(self._target, self._level)
         self._intensity += (reactive - self._intensity) * 0.10
         self._level *= 0.9
-        self._phase += 0.016 + self._intensity * 0.06
+        self._phase += 0.016 + self._intensity * 0.05
+        self._rot += self._p["spin"] * 0.016
         now = time.monotonic()
         self._pulses = [t for t in self._pulses if now - t < 1.2]
         self.update()
 
     def _pulse_amp(self) -> float:
         now = time.monotonic()
-        amp = 0.0
+        a = 0.0
         for t in self._pulses:
             prog = (now - t) / 1.2
             if 0 <= prog <= 1:
-                amp = max(amp, math.sin(prog * math.pi))
-        return amp
+                a = max(a, math.sin(prog * math.pi))
+        return a
 
     # -- painting ------------------------------------------------------------
     def paintEvent(self, _):
@@ -110,58 +144,56 @@ class OrbWidget(QWidget):
         p.setRenderHint(QPainter.Antialiasing, True)
         w, h = self.width(), self.height()
         cx, cy = w / 2, h / 2 - h * 0.02
-        R = min(w, h) / 2 * 0.72
+        R = min(w, h) / 2 * 0.74
+        mp = self._p
         t = self._phase
-        inten = self._intensity + 0.45 * self._pulse_amp()
-        rot = t * 0.12
-        squash = 0.96
+        inten = min(1.4, self._intensity + 0.5 * self._pulse_amp())
+        squash = 0.97
 
-        self._core(p, cx, cy, R, inten)
+        self._core(p, cx, cy, R, inten, mp["bright"])
+
+        breath = 1.0 + mp["breath"] * math.sin(t * 0.9)
+        R0 = R * 0.985 * breath
+        thick = R * mp["thick"]
+        wave_amp = R * mp["amp"] * (0.45 + 0.9 * inten)
+        lobes = mp["lobes"]
 
         p.setCompositionMode(QPainter.CompositionMode_Plus)
         p.setPen(Qt.NoPen)
-        ic = min(1.0, inten)
-        base_amp = R * (0.03 + 0.095 * ic)          # keep a defined ring band
         for pt in self._particles:
-            l = pt["l"]
-            Rl = R * (0.85 + 0.032 * l)             # tight concentric band
-            a = pt["a"] + rot + l * 0.04
-            k1, k2, k3 = 3 + l, 6 - (l % 3), 9
-            disp = (math.sin(k1 * a + t * pt["sp"] + pt["ph"])
-                    + 0.55 * math.sin(k2 * a - t * 1.1)
-                    + 0.35 * math.sin(k3 * a + t * 0.6 + pt["ph"]))
-            amp = base_amp * (1.5 if pt["spray"] else 1.0)
-            rr = Rl + disp * amp + pt["jit"] * R * 0.015
+            a = pt["a"] + self._rot
+            disp = (math.sin(lobes * a + t * pt["sp"] + pt["ph"])
+                    + 0.5 * math.sin((lobes + 3) * a - t * 1.1)
+                    + 0.3 * math.sin((lobes + 6) * a + t * 0.6 + pt["ph"]))
+            spray = (mp["spray"] * 1.6) if pt["spray"] else mp["spray"]
+            rr = R0 + pt["rf"] * thick + disp * wave_amp * (0.5 + 0.5 * spray) + pt["jit"] * R * 0.006
             x = cx + rr * math.cos(a)
             y = cy + rr * math.sin(a) * squash
 
-            peak = 0.5 + 0.5 * (disp / 1.9)            # outward = brighter
-            bright = max(0.0, min(1.0, pt["b"] * (0.4 + 0.7 * peak)))
-            alpha = int(45 + 150 * bright)
-            p.setBrush(QColor(C_R, C_G, C_B, alpha))
-            s = pt["sz"] * (1.0 + 0.4 * bright)
+            peak = 0.5 + 0.5 * (disp / 1.8)
+            bright = max(0.0, min(1.0, pt["b"] * (0.4 + 0.7 * peak) * mp["bright"]))
+            p.setBrush(QColor(C_R, C_G, C_B, int(40 + 150 * bright)))
+            s = pt["sz"] * (1.0 + 0.35 * bright)
             p.drawEllipse(QPointF(x, y), s, s)
-            if bright > 0.85:                          # hottest points sparkle
-                p.setBrush(QColor(225, 252, 254, 170))
-                p.drawEllipse(QPointF(x, y), s * 0.5, s * 0.5)
+            if bright > 0.9:
+                p.setBrush(QColor(225, 252, 254, 150))
+                p.drawEllipse(QPointF(x, y), s * 0.45, s * 0.45)
         p.setCompositionMode(QPainter.CompositionMode_SourceOver)
 
         self._caption_text(p, cx, cy + R + min(w, h) * 0.06, R * 2)
         p.end()
 
-    def _core(self, p, cx, cy, R, inten):
-        # faint inner disc + soft central glow
+    def _core(self, p, cx, cy, R, inten, bright):
         p.setPen(Qt.NoPen)
-        g = QRadialGradient(cx, cy, R * 0.75)
-        a = int(22 + 40 * inten)
+        g = QRadialGradient(cx, cy, R * 0.8)
+        a = int((20 + 38 * inten) * bright)
         g.setColorAt(0.0, QColor(C_R, C_G, C_B, a))
         g.setColorAt(0.55, QColor(C_R, C_G, C_B, int(a * 0.4)))
         g.setColorAt(1.0, QColor(0, 0, 0, 0))
         p.setBrush(g)
-        p.drawEllipse(QPointF(cx, cy), R * 0.75, R * 0.72)
-        # tiny faint core nucleus
+        p.drawEllipse(QPointF(cx, cy), R * 0.8, R * 0.78)
         g2 = QRadialGradient(cx, cy, R * 0.16)
-        g2.setColorAt(0.0, QColor(180, 240, 245, int(60 + 60 * inten)))
+        g2.setColorAt(0.0, QColor(185, 242, 246, int((55 + 55 * inten) * bright)))
         g2.setColorAt(1.0, QColor(0, 0, 0, 0))
         p.setBrush(g2)
         p.drawEllipse(QPointF(cx, cy), R * 0.16, R * 0.16)

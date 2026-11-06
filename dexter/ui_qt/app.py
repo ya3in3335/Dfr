@@ -222,6 +222,7 @@ class DexterWindow(QWidget):
             pass
         elif t == "speak":
             self.orb.set_state("speaking"); self.orb.set_caption(ev.get("text", "")[:80])
+            self.orb.flash_mood("happy", 2.2)   # Dexter is pleased to answer
             self.add_message("dexter", ev.get("text", ""))
         elif t == "card":
             self.add_card(ev)
@@ -234,6 +235,7 @@ class DexterWindow(QWidget):
         elif t == "spoke":
             self.orb.set_state("speaking")
         elif t == "error":
+            self.orb.flash_mood("alert", 2.5)
             self.add_card({"id": "err", "title": "Error", "body": ev.get("message", ""), "accent": "red"})
 
     # ---- feed widgets ----
