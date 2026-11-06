@@ -74,6 +74,10 @@ class SettingsDialog(QDialog):
         f2.addRow("Text / brain", self.text_model)
         f2.addRow("Vision", self.vision_model)
         form.addLayout(f2)
+        mhint = QLabel("GPT عبر Groq: اكتب  groq:openai/gpt-oss-120b  أو  groq:openai/gpt-oss-20b. "
+                       "بدون بادئة = نموذج OpenRouter. يجرّب عدة نماذج تلقائيًا عند الازدحام.")
+        mhint.setObjectName("hint"); mhint.setWordWrap(True)
+        form.addWidget(mhint)
 
         # ---- Voice ----
         form.addWidget(_section("VOICE"))

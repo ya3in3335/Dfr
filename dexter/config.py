@@ -54,7 +54,7 @@ class Settings:
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     text_model: str = field(
-        default_factory=lambda: os.getenv("DEXTER_TEXT_MODEL", "openrouter/free").strip()
+        default_factory=lambda: os.getenv("DEXTER_TEXT_MODEL", "groq:openai/gpt-oss-120b").strip()
     )
     vision_model: str = field(
         default_factory=lambda: os.getenv("DEXTER_VISION_MODEL", "nvidia/nemotron-3.5-super-vl:free").strip()
@@ -67,6 +67,11 @@ class Settings:
     # used automatically on rate-limit / unavailability. Override with a
     # comma-separated DEXTER_TEXT_MODELS / DEXTER_VISION_MODELS.
     text_fallbacks: tuple = (
+        # More GPT / Groq models (prefix "groq:" routes to the Groq API).
+        "groq:openai/gpt-oss-20b",
+        "groq:qwen/qwen3.8-27b",
+        # Free models on OpenRouter.
+        "openrouter/free",
         "nvidia/nemotron-3-ultra-550b-a55b:free",
         "dots-studio/dots-3-note-preview:free",
         "recursive/flint-v1.0:free",
