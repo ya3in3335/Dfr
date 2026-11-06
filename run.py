@@ -48,7 +48,13 @@ def main() -> int:
     url = f"http://{settings.host}:{settings.port}"
     threading.Timer(1.2, lambda: _open(url)).start()
 
-    uvicorn.run("dexter.server:app", host=settings.host, port=settings.port, log_level="info")
+    if getattr(sys, "frozen", False):
+        # Packaged .exe: pass the app object directly (no import-string reload).
+        from dexter.server import app as fastapi_app
+
+        uvicorn.run(fastapi_app, host=settings.host, port=settings.port, log_level="info")
+    else:
+        uvicorn.run("dexter.server:app", host=settings.host, port=settings.port, log_level="info")
     return 0
 
 

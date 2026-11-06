@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __app_name__, __version__
-from .config import settings
+from .config import resource_path, settings
 from .core.agent import DexterAgent
 from .core.llm import OpenRouterClient
 from .core.memory import Memory
@@ -24,7 +24,7 @@ from .core.permissions import CAPABILITIES, PermissionManager
 from .tools.registry import ToolRegistry, capability_runtime_status
 from .voice.speech import Speaker
 
-WEB_DIR = Path(__file__).parent / "web"
+WEB_DIR = resource_path("dexter/web")
 
 
 class DexterApp:

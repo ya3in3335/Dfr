@@ -7,13 +7,34 @@ read from the environment and never written to the repo.
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+def resource_path(rel: str) -> Path:
+    """Resolve a bundled resource path for both source and frozen (PyInstaller) runs.
+
+    When packaged into a one-file executable, data files are unpacked to a temp
+    directory exposed as ``sys._MEIPASS``. In a normal source checkout we resolve
+    relative to the project root (the parent of the ``dexter`` package).
+    """
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        return Path(base) / rel
+    return Path(__file__).resolve().parent.parent / rel
+
 
 try:
     from dotenv import load_dotenv
 
+    # Load .env from the current working directory (source runs)…
     load_dotenv()
+    # …and, when running as a packaged .exe, also look next to the executable.
+    if getattr(sys, "frozen", False):
+        _exe_env = Path(sys.executable).resolve().parent / ".env"
+        if _exe_env.exists():
+            load_dotenv(_exe_env, override=False)
 except Exception:  # pragma: no cover - dotenv is optional
     pass
 

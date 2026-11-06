@@ -1,0 +1,65 @@
+name: Build Dexter Cyber executables
+
+# Builds a standalone executable on each OS and uploads it as a downloadable
+# artifact. On a version tag (v*) the executables are also attached to a Release.
+#
+# How to get your .exe:
+#   1. Push to the repo (this workflow runs automatically), or trigger it
+#      manually from the Actions tab ("Run workflow").
+#   2. Open the finished run → Artifacts → download "DexterCyber-windows".
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: DexterCyber-windows
+            binary: dist/DexterCyber.exe
+          - os: macos-latest
+            artifact: DexterCyber-macos
+            binary: dist/DexterCyber
+          - os: ubuntu-latest
+            artifact: DexterCyber-linux
+            binary: dist/DexterCyber
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Build executable
+        run: python -m PyInstaller --noconfirm dexter_cyber.spec
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.binary }}
+          if-no-files-found: error
+
+      - name: Attach to Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.binary }}

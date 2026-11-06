@@ -43,6 +43,52 @@ review the capabilities, grant what you want, and Dexter comes online.
 
 ---
 
+## 📦 Build a standalone executable (`.exe`)
+
+You can package Dexter into a **single self-contained executable** — no Python install needed on
+the target machine. The Python runtime, all dependencies, and the web UI are bundled in.
+
+### Option A — build it yourself (one command)
+
+**Windows** (produces `dist\DexterCyber.exe`):
+
+```bat
+build.bat
+```
+
+**macOS / Linux** (produces `dist/DexterCyber`):
+
+```bash
+./build.sh
+```
+
+Both just run PyInstaller against [`dexter_cyber.spec`](dexter_cyber.spec):
+
+```bash
+pip install -r requirements.txt pyinstaller
+pyinstaller --noconfirm dexter_cyber.spec
+```
+
+Then put a `.env` file (with your `OPENROUTER_API_KEY`) **next to the executable** and double-click
+it. A console window shows the local URL and opens the UI in your browser.
+
+### Option B — let GitHub build it for you (no local setup)
+
+This repo ships a workflow at [`.github/workflows/build-exe.yml`](.github/workflows/build-exe.yml)
+that builds the executable for **Windows, macOS and Linux** automatically:
+
+1. Push the repo to GitHub (or open the **Actions** tab → *Build Dexter Cyber executables* →
+   **Run workflow**).
+2. When the run finishes, open it and download the **`DexterCyber-windows`** artifact (or macOS /
+   Linux). That's your ready-to-run `DexterCyber.exe`.
+3. Tagging a release (`git tag v1.0.0 && git push --tags`) also attaches the binaries to a GitHub
+   Release automatically.
+
+> ℹ️ A Windows `.exe` must be compiled on Windows. The GitHub Actions workflow runs on a real
+> Windows runner, so it produces a genuine `.exe` even if you're on macOS or Linux.
+
+---
+
 ## 🧠 How it works
 
 ```
