@@ -123,6 +123,15 @@ class Settings:
         default_factory=lambda: os.getenv("DEXTER_GROQ_TTS_MODEL", "canopylabs/orpheus-arabic-saudi").strip()
     )
     groq_voice: str = field(default_factory=lambda: os.getenv("DEXTER_GROQ_VOICE", "abdullah").strip())
+    # Arabic (Saudi) neural voices available on the orpheus-arabic-saudi model.
+    groq_arabic_voices: tuple = (
+        ("abdullah", "عبد الله — ذكر"),
+        ("fahad", "فهد — ذكر"),
+        ("sultan", "سلطان — ذكر"),
+        ("noura", "نورة — أنثى"),
+        ("lulwa", "لولوة — أنثى"),
+        ("aisha", "عائشة — أنثى"),
+    )
 
     # Wake word for always-on listening (comma-separated accepts several).
     wake_word: str = field(default_factory=lambda: os.getenv("DEXTER_WAKE_WORD", "dexter").strip().lower())

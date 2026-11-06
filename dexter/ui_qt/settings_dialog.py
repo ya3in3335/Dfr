@@ -83,13 +83,19 @@ class SettingsDialog(QDialog):
         form.addWidget(_section("VOICE"))
         self.engine = QComboBox()
         self.engine.addItem("System voice (offline)", "system")
-        self.engine.addItem("Groq neural (Arabic / abdullah)", "groq")
+        self.engine.addItem("Groq neural (Arabic)", "groq")
         self.engine.setCurrentIndex(1 if settings.voice_engine == "groq" else 0)
-        self.groq_voice = QLineEdit(settings.groq_voice)
+        # Arabic voice picker (Saudi neural voices on orpheus-arabic-saudi)
+        self.groq_voice = QComboBox()
+        for vid, label in settings.groq_arabic_voices:
+            self.groq_voice.addItem(f"{label}  ·  {vid}", vid)
+        idx = next((i for i, (vid, _) in enumerate(settings.groq_arabic_voices)
+                    if vid == settings.groq_voice), 0)
+        self.groq_voice.setCurrentIndex(idx)
         self.rate = QSpinBox(); self.rate.setRange(80, 320); self.rate.setValue(settings.voice_rate)
         f3 = QFormLayout(); f3.setSpacing(10)
         f3.addRow("Engine", self.engine)
-        f3.addRow("Groq voice", self.groq_voice)
+        f3.addRow("الصوت العربي", self.groq_voice)
         f3.addRow("Rate (wpm)", self.rate)
         form.addLayout(f3)
 
@@ -148,7 +154,7 @@ class SettingsDialog(QDialog):
             text_model=self.text_model.text().strip(),
             vision_model=self.vision_model.text().strip(),
             voice_engine=self.engine.currentData(),
-            groq_voice=self.groq_voice.text().strip(),
+            groq_voice=self.groq_voice.currentData(),
             voice_rate=self.rate.value(),
             wake_word=self.wake.text().strip().lower(),
         )
