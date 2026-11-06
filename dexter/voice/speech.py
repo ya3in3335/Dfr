@@ -27,7 +27,14 @@ class Speaker:
         self._queue: "queue.Queue[Optional[str]]" = queue.Queue()
         self._thread: Optional[threading.Thread] = None
         self._available = False
+        self.rate = settings.voice_rate
         self._start()
+
+    def set_rate(self, rate: int) -> None:
+        try:
+            self.rate = int(rate)
+        except Exception:
+            pass
 
     def _start(self) -> None:
         try:
@@ -48,7 +55,7 @@ class Speaker:
 
         try:
             engine = pyttsx3.init()
-            engine.setProperty("rate", settings.voice_rate)
+            engine.setProperty("rate", self.rate)
             if settings.voice_name:
                 for voice in engine.getProperty("voices"):
                     if settings.voice_name.lower() in (voice.name or "").lower():
@@ -63,6 +70,7 @@ class Speaker:
             if text is None:
                 break
             try:
+                engine.setProperty("rate", self.rate)
                 engine.say(text)
                 engine.runAndWait()
             except Exception:

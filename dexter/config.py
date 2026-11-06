@@ -88,19 +88,32 @@ class Settings:
     app_title: str = "Dexter Cyber"
     app_referer: str = "https://localhost/dexter-cyber"
 
+    # Fields the user can edit from the Settings dialog and have persisted.
+    _PERSIST = (
+        "openrouter_api_key", "groq_api_key", "text_model", "vision_model",
+        "voice_engine", "voice_enabled", "voice_rate", "groq_tts_model",
+        "groq_voice", "wake_word",
+    )
+
     def __post_init__(self) -> None:
-        # Apply persisted runtime preferences (overrides env defaults).
+        # Apply persisted preferences (GUI-entered values override env defaults).
         try:
             import json
 
             if self.prefs_file.exists():
                 prefs = json.loads(self.prefs_file.read_text(encoding="utf-8"))
-                if prefs.get("voice_engine") in ("system", "groq"):
-                    self.voice_engine = prefs["voice_engine"]
-                if isinstance(prefs.get("voice_enabled"), bool):
-                    self.voice_enabled = prefs["voice_enabled"]
+                for k in self._PERSIST:
+                    if k in prefs and prefs[k] is not None:
+                        setattr(self, k, prefs[k])
         except Exception:
             pass
+
+    def update_settings(self, **values) -> None:
+        """Apply and persist edited settings (from the Settings dialog)."""
+        for k, v in values.items():
+            if k in self._PERSIST and v is not None:
+                setattr(self, k, v.strip() if isinstance(v, str) else v)
+        self.save_prefs()
 
     def save_prefs(self) -> None:
         import json
@@ -108,8 +121,9 @@ class Settings:
         try:
             self.prefs_file.write_text(
                 json.dumps(
-                    {"voice_engine": self.voice_engine, "voice_enabled": self.voice_enabled},
+                    {k: getattr(self, k) for k in self._PERSIST},
                     indent=2,
+                    ensure_ascii=False,
                 ),
                 encoding="utf-8",
             )

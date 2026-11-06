@@ -15,7 +15,10 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 # --- Collect dynamically-imported submodules so nothing is missing at runtime ---
-hidden = ["dexter.server", "dexter.config"]
+hidden = [
+    "dexter.server", "dexter.config", "dexter.ui_qt.app",
+    "PySide6.QtSvg", "PySide6.QtSvgWidgets", "PySide6.QtMultimedia",
+]
 for pkg in ("uvicorn", "pyttsx3", "anyio", "httpx", "httpcore", "websockets", "comtypes"):
     try:
         hidden += collect_submodules(pkg)
@@ -23,8 +26,8 @@ for pkg in ("uvicorn", "pyttsx3", "anyio", "httpx", "httpcore", "websockets", "c
         # comtypes exists only on Windows; ignore where unavailable.
         pass
 
-# --- Bundle the web UI (HTML/CSS/JS) next to the dexter package ---
-datas = [("dexter/web", "dexter/web")]
+# --- Bundle the web UI and app assets (icon, etc.) ---
+datas = [("dexter/web", "dexter/web"), ("assets", "assets")]
 
 # Optional custom icon (place assets/dexter.ico in the repo to use it).
 _icon_path = Path("assets/dexter.ico")
@@ -64,7 +67,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,  # keep a console so the local URL / errors are visible
+    console=False,  # windowed native app (no console window)
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

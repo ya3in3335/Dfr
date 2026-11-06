@@ -1,6 +1,9 @@
 # Dexter Cyber — dependencies
 
-# Web backend (JARVIS-style UI served locally)
+# Native desktop UI (PySide6 / Qt) — the primary interface
+PySide6==6.8.1.1
+
+# Optional classic web backend (run.py --web)
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 jinja2==3.1.5
