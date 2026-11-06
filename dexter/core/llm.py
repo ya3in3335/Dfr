@@ -70,6 +70,12 @@ class OpenRouterClient:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.post(url, headers=self._headers(), json=payload)
+                # Auto-recover when the chosen model is no longer free.
+                if resp.status_code == 404 and payload["model"] != settings.free_fallback_model:
+                    low = resp.text.lower()
+                    if "unavailable for free" in low or "use this slug" in low or "no endpoints" in low:
+                        payload["model"] = settings.free_fallback_model
+                        resp = await client.post(url, headers=self._headers(), json=payload)
         except httpx.HTTPError as exc:
             raise LLMError(f"Network error reaching OpenRouter: {exc}") from exc
 

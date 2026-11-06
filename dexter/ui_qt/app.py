@@ -378,17 +378,28 @@ def main() -> int:
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
+    # Animated splash first; heavy init runs while it plays.
+    from .splash import SplashScreen
+    splash = SplashScreen()
+    splash.show()
+    app.processEvents()
+
     loop = AsyncLoop(); loop.start()
     assistant = Assistant()
 
-    if not assistant.permissions.has_consented:
-        dlg = ConsentDialog(assistant)
-        dlg.setStyleSheet(QSS)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return 0
+    holder = {}
 
-    win = DexterWindow(assistant, loop)
-    win.show()
+    def after_splash():
+        if not assistant.permissions.has_consented:
+            dlg = ConsentDialog(assistant)
+            dlg.setStyleSheet(QSS)
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                app.quit(); return
+        win = DexterWindow(assistant, loop)
+        holder["win"] = win
+        win.show(); win.raise_(); win.activateWindow()
+
+    splash.finished.connect(after_splash)
     return app.exec()
 
 

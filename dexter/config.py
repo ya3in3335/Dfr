@@ -54,11 +54,14 @@ class Settings:
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     text_model: str = field(
-        default_factory=lambda: os.getenv("DEXTER_TEXT_MODEL", "meta-llama/llama-3.3-70b-instruct:free").strip()
+        default_factory=lambda: os.getenv("DEXTER_TEXT_MODEL", "openrouter/free").strip()
     )
     vision_model: str = field(
-        default_factory=lambda: os.getenv("DEXTER_VISION_MODEL", "google/gemini-2.0-flash-exp:free").strip()
+        default_factory=lambda: os.getenv("DEXTER_VISION_MODEL", "nvidia/nemotron-3.5-super-vl:free").strip()
     )
+    # A reliably-free fallback used automatically if the chosen model is no
+    # longer free (OpenRouter 404 "unavailable for free").
+    free_fallback_model: str = "openrouter/free"
 
     home: Path = field(default_factory=_home)
 
