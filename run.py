@@ -37,6 +37,47 @@ def _log_crash(tb: str) -> None:
     print(body)
 
 
+class _Tee:
+    """Write to both the console and a log file (handles a missing stream)."""
+
+    def __init__(self, *streams):
+        self._streams = [s for s in streams if s is not None]
+
+    def write(self, data):
+        for s in self._streams:
+            try:
+                s.write(data); s.flush()
+            except Exception:
+                pass
+
+    def flush(self):
+        for s in self._streams:
+            try:
+                s.flush()
+            except Exception:
+                pass
+
+
+def _install_diagnostics():
+    """Capture ALL output + fatal crashes to a log, so a flash-and-close build
+    still tells us exactly why it exited."""
+    try:
+        import faulthandler
+        import platform
+        import tempfile
+
+        log_path = Path(tempfile.gettempdir()) / "DexterCyber-boot.log"
+        f = open(log_path, "w", encoding="utf-8", buffering=1)
+        f.write(f"{__app_name__} v{__version__}\nPython {sys.version}\n{platform.platform()}\n"
+                f"frozen={getattr(sys, 'frozen', False)}\n--- boot ---\n")
+        faulthandler.enable(f)                      # dumps even hard crashes
+        sys.stdout = _Tee(sys.stdout, f)
+        sys.stderr = _Tee(sys.stderr, f)
+        return log_path
+    except Exception:
+        return None
+
+
 def _run_web() -> int:
     try:
         import uvicorn
@@ -58,6 +99,7 @@ def _run_web() -> int:
 
 
 def main() -> int:
+    _install_diagnostics()
     if "--web" in sys.argv:
         return _run_web()
     try:

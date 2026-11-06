@@ -63,25 +63,35 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# One-DIR build (a folder, not a single self-extracting exe) with UPX disabled.
+# This dramatically reduces antivirus false-positives that silently delete
+# one-file PyInstaller binaries, and it launches faster (no extraction step).
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="DexterCyber",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=True,  # show a console so startup errors are visible (diagnostic)
+    upx=False,
+    console=True,  # keep a console so startup errors are visible
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
     icon=icon,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name="DexterCyber",
 )

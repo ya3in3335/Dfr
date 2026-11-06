@@ -27,7 +27,7 @@ jobs:
         include:
           - os: windows-latest
             artifact: DexterCyber-windows
-            binary: dist/DexterCyber.exe
+            binary: dist/DexterCyber
           - os: macos-latest
             artifact: DexterCyber-macos
             binary: dist/DexterCyber
