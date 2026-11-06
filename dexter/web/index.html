@@ -2,104 +2,105 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>Dexter Cyber</title>
+  <link rel="icon" href="/static/favicon.png" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <div id="app">
-
-    <!-- ===== First-run consent overlay ===== -->
-    <div id="consent" class="overlay hidden">
-      <div class="consent-card">
-        <div class="consent-head">
-          <div class="reactor small"><span></span><span></span><span></span></div>
-          <div>
-            <h1>DEXTER<em>CYBER</em></h1>
-            <p class="tag">First-run authorization</p>
-          </div>
-        </div>
-        <p class="consent-intro">
-          Dexter can operate this computer on your behalf. Review the capabilities below and grant
-          the ones you are comfortable with. <strong>You are asked only once</strong> — your choice is
-          stored locally on this machine and can be changed anytime from Settings.
-        </p>
-        <div id="consent-list" class="cap-list"></div>
-        <div class="consent-actions">
-          <button id="consent-all" class="btn ghost">Select all</button>
-          <button id="consent-accept" class="btn primary">Authorize Dexter</button>
-        </div>
-        <p class="consent-foot">Nothing is sent anywhere except the OpenRouter AI brain you configured. No telemetry.</p>
-      </div>
-    </div>
-
-    <!-- ===== Settings drawer ===== -->
-    <div id="settings" class="overlay hidden">
-      <div class="settings-card">
-        <div class="settings-head">
-          <h2>Settings &amp; Permissions</h2>
-          <button id="settings-close" class="icon-btn">✕</button>
-        </div>
-        <div class="settings-body">
-          <div class="field">
-            <span class="field-label">AI brain (text)</span>
-            <span id="model-text" class="field-value">—</span>
-          </div>
-          <div class="field">
-            <span class="field-label">Vision model</span>
-            <span id="model-vision" class="field-value">—</span>
-          </div>
-          <div class="field">
-            <span class="field-label">API key</span>
-            <span id="api-status" class="field-value">—</span>
-          </div>
-          <h3>Capabilities</h3>
-          <div id="settings-caps" class="cap-list compact"></div>
-          <div class="settings-actions">
-            <button id="clear-memory" class="btn ghost">Clear memory</button>
-            <button id="reset-consent" class="btn danger">Revoke all &amp; re-ask</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ===== Main HUD ===== -->
-    <header class="topbar">
-      <div class="brand">
-        <div class="reactor tiny"><span></span><span></span><span></span></div>
-        <div class="brand-text">DEXTER<em>CYBER</em></div>
-      </div>
-      <div class="status">
-        <span id="conn-dot" class="dot"></span>
-        <span id="status-text">connecting…</span>
-        <button id="open-settings" class="icon-btn" title="Settings">⚙</button>
-      </div>
-    </header>
-
-    <main class="stage">
-      <section class="orb-wrap">
-        <div id="orb" class="reactor big">
-          <span></span><span></span><span></span>
-          <div class="core"></div>
-        </div>
-        <div id="waveform" class="waveform">
-          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-        </div>
-        <div id="orb-caption" class="orb-caption">Standing by.</div>
-      </section>
-
-      <section class="feed-wrap">
-        <div id="feed" class="feed"></div>
-      </section>
-    </main>
-
-    <footer class="composer">
-      <button id="mic" class="icon-btn mic" title="Voice input (browser speech)">🎙</button>
-      <input id="input" type="text" placeholder="Speak to Dexter…  (try: “take a look at my screen”)" autocomplete="off" />
-      <button id="send" class="btn primary">Send</button>
-    </footer>
+  <!-- ===== Top-left brand / status (subtle) ===== -->
+  <div class="hud-top">
+    <span id="conn-dot" class="dot"></span>
+    <span id="brand">DEXTER<em>CYBER</em></span>
+    <span id="run-badge" class="run-badge hidden">0 running</span>
   </div>
 
+  <!-- ===== Top-right controls ===== -->
+  <div class="hud-tools">
+    <button id="listen-toggle" class="pill" title="Always-on wake word">🎧 Wake: off</button>
+    <button id="open-settings" class="icon-btn" title="Settings">⚙</button>
+  </div>
+
+  <!-- ===== The orb (built entirely in code) ===== -->
+  <main class="scene">
+    <div id="orb" class="orb" data-state="idle">
+      <div class="glow"></div>
+      <div class="ring ring-outer"></div>
+      <div class="ring ring-mid"></div>
+      <div class="ring ring-inner"></div>
+      <div class="core">
+        <canvas id="wave"></canvas>
+        <div id="caption" class="caption">Hi, how can I help you&nbsp;…</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ===== Floating data cards (appear in empty space) ===== -->
+  <div id="cards" class="cards"></div>
+
+  <!-- ===== Multi-task board ===== -->
+  <div id="tasks" class="tasks hidden">
+    <div class="tasks-head">TASKS</div>
+    <div id="tasks-list"></div>
+  </div>
+
+  <!-- ===== Minimal composer (auto-dims) ===== -->
+  <footer id="composer" class="composer">
+    <button id="mic" class="icon-btn mic" title="Voice input">🎙</button>
+    <input id="input" type="text" placeholder="Speak or type to Dexter…" autocomplete="off" />
+    <button id="send" class="icon-btn send" title="Send">➤</button>
+  </footer>
+
+  <!-- ===== First-run consent overlay ===== -->
+  <div id="consent" class="overlay hidden">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="mini-orb"></div>
+        <div>
+          <h1>DEXTER<em>CYBER</em></h1>
+          <p class="sub">First-run authorization</p>
+        </div>
+      </div>
+      <p class="lead">
+        Dexter can operate this computer for you. Review the capabilities and grant what you are
+        comfortable with. <strong>You are asked only once</strong> — stored locally, changeable anytime.
+      </p>
+      <div id="consent-list" class="cap-list"></div>
+      <div class="row-end">
+        <button id="consent-all" class="btn ghost">Select all</button>
+        <button id="consent-accept" class="btn primary">Authorize Dexter</button>
+      </div>
+      <p class="fine">Nothing leaves this machine except requests to the AI brain / voice you configure.</p>
+    </div>
+  </div>
+
+  <!-- ===== Settings overlay ===== -->
+  <div id="settings" class="overlay hidden">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Settings</h2>
+        <button id="settings-close" class="icon-btn">✕</button>
+      </div>
+      <div class="settings-grid">
+        <div class="kv"><span>AI brain</span><b id="model-text">—</b></div>
+        <div class="kv"><span>Vision model</span><b id="model-vision">—</b></div>
+        <div class="kv"><span>OpenRouter key</span><b id="api-status">—</b></div>
+      </div>
+
+      <h3>Voice</h3>
+      <div id="voice-engines" class="voice-engines"></div>
+
+      <h3>Capabilities</h3>
+      <div id="settings-caps" class="cap-list compact"></div>
+
+      <div class="row-end">
+        <button id="clear-memory" class="btn ghost">Clear memory</button>
+        <button id="reset-consent" class="btn danger">Revoke all &amp; re-ask</button>
+      </div>
+    </div>
+  </div>
+
+  <audio id="player" class="hidden"></audio>
   <script src="/static/app.js"></script>
 </body>
 </html>

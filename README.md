@@ -16,10 +16,15 @@ your behalf — all behind a clear, one-time consent screen that you control.
 - **Free AI brain** — uses OpenRouter's `:free` models (no cost). Text + vision.
 - **Sees the screen** — captures your display and reasons about what's on it via a vision model.
 - **Operates the computer** — moves the mouse, clicks, types, runs commands, reads/writes files.
-- **Speaks** — offline text-to-speech (`pyttsx3`, the same engine used by the referenced
-  [J.A.R.V.I.S project](https://github.com/GauravSingh9356/J.A.R.V.I.S)).
-- **Voice input** — browser speech recognition in the UI, plus optional microphone wake-word.
-- **JARVIS-style HUD** — arc-reactor interface with a live reasoning/action trace.
+- **Two voices** — offline `pyttsx3` (same engine as the referenced
+  [J.A.R.V.I.S project](https://github.com/GauravSingh9356/J.A.R.V.I.S)), **or** Groq neural TTS
+  (`canopylabs/orpheus-arabic-saudi`, Arabic-Saudi voice `abdullah`) — switchable in Settings.
+- **Always-on wake word** — background continuous listening; say **“Dexter …”** and it acts.
+- **Multi-tasking** — commands run concurrently, with an on-screen **task board** tracking progress.
+- **Live data cards** — results appear as cards in the empty space around the orb, dismissible
+  individually or cleared on request.
+- **Clean animated orb** — a JARVIS-style glowing orb built entirely in code (CSS rings +
+  canvas waveform) that reacts to listening / thinking / speaking states.
 - **Permission-first** — one-time authorization, fully granular and revocable.
 
 ---
@@ -137,7 +142,12 @@ re-ask** in Settings) to be prompted again.
 | `DEXTER_VISION_MODEL` | `google/gemini-2.0-flash-exp:free` | Screen-vision model. |
 | `DEXTER_HOST` / `DEXTER_PORT` | `127.0.0.1` / `8787` | Local UI address. |
 | `DEXTER_VOICE` | `1` | Enable spoken replies. |
-| `DEXTER_VOICE_RATE` | `175` | Words per minute. |
+| `DEXTER_VOICE_RATE` | `175` | Words per minute (system voice). |
+| `DEXTER_VOICE_ENGINE` | `system` | `system` (offline) or `groq` (neural, plays in browser). |
+| `GROQ_API_KEY` | — | Free key from https://console.groq.com/keys (for the Groq voice). |
+| `DEXTER_GROQ_TTS_MODEL` | `canopylabs/orpheus-arabic-saudi` | Groq TTS model. |
+| `DEXTER_GROQ_VOICE` | `abdullah` | Groq voice name. |
+| `DEXTER_WAKE_WORD` | `dexter` | Wake word for always-on listening. |
 | `DEXTER_HOME` | `~/.dexter_cyber` | Where consent/memory/logs live. |
 
 ---

@@ -40,6 +40,10 @@ Rules:
 - Output ONLY the JSON object. No markdown, no prose outside it.
 - Take one action at a time, then wait for the OBSERVATION before the next step.
 - To act on screen, first use see_screen to find elements and their coordinates, then move/click/type.
+- Surface useful information visually: when you have results, lists, numbers or options to show, call
+  show_card so the user sees it on the HUD. When juggling several steps, track them with add_task /
+  update_task so the on-screen task board reflects your progress (multi-tasking).
+- If the user asks to clear/hide the cards, call clear_cards.
 - If a capability you need is not in the tool list, it was not granted — explain that in "speak".
 - Never pretend to have done something you did not do. If a tool returns an error, deal with it honestly.
 - Keep going until the task is done, then give a short, friendly spoken summary.
@@ -139,7 +143,7 @@ class DexterAgent:
 
             await emit({"type": "action", "tool": tool_name, "args": tool_args, "step": step})
 
-            observation = await self.tools.dispatch(tool_name, tool_args)
+            observation = await self.tools.dispatch(tool_name, tool_args, emit)
             await emit({"type": "observation", "tool": tool_name, "result": observation, "step": step})
 
             # Record the step so the model keeps context across the loop.

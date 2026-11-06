@@ -6,8 +6,15 @@ the human-readable tool catalogue that goes into the agent's system prompt.
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional
+
+# A pseudo-capability for UI-only tools that are always available (they only
+# draw on screen and never touch the OS, so they need no user grant).
+UI_CAP = "ui"
+
+Emit = Optional[Callable[[Dict[str, Any]], Awaitable[None]]]
 
 from ..core.llm import OpenRouterClient
 from ..core.permissions import PermissionError as DexterPermissionError
@@ -28,7 +35,13 @@ class ToolRegistry:
         self.permissions = permissions
         self.llm = llm
         self._specs: Dict[str, ToolSpec] = {}
+        self.tasks: List[Dict[str, Any]] = []  # multi-task board
+        self._task_seq = 0
         self._register_all()
+
+    def _cap_ok(self, capability: str) -> bool:
+        """UI tools are always available; everything else needs a grant."""
+        return capability == UI_CAP or self.permissions.is_granted(capability)
 
     # -- catalogue -----------------------------------------------------------
     def _add(self, spec: ToolSpec) -> None:
@@ -96,12 +109,35 @@ class ToolRegistry:
             "Report basic information about this computer.",
             {},
         ))
+        # --- UI tools (always available; they only draw on the HUD) ---
+        self._add(ToolSpec(
+            "show_card", UI_CAP,
+            "Display a data card on the HUD to show the user information, results or options. "
+            "Use this to surface anything worth seeing (lists, summaries, numbers, steps).",
+            {"title": "card title", "body": "card text (supports simple line breaks)",
+             "accent": "optional color hint: cyan|green|amber|red"},
+        ))
+        self._add(ToolSpec(
+            "clear_cards", UI_CAP,
+            "Remove all data cards from the HUD. Use when the user asks to clear or hide the cards.",
+            {},
+        ))
+        self._add(ToolSpec(
+            "add_task", UI_CAP,
+            "Add a task to the on-screen multi-task board (for tracking several things at once).",
+            {"title": "task description"},
+        ))
+        self._add(ToolSpec(
+            "update_task", UI_CAP,
+            "Update a task's status on the board.",
+            {"id": "task id", "status": "pending|active|done|failed"},
+        ))
 
     def catalogue_for_prompt(self) -> str:
         """Render only the tools the user has currently granted."""
         lines: List[str] = []
         for spec in self._specs.values():
-            if not self.permissions.is_granted(spec.capability):
+            if not self._cap_ok(spec.capability):
                 continue
             arg_desc = ", ".join(f"{k} ({v})" for k, v in spec.args.items()) or "no arguments"
             lines.append(f"- {spec.name}: {spec.description} Args: {arg_desc}")
@@ -110,24 +146,63 @@ class ToolRegistry:
         return "\n".join(lines)
 
     def granted_tool_names(self) -> List[str]:
-        return [s.name for s in self._specs.values() if self.permissions.is_granted(s.capability)]
+        return [s.name for s in self._specs.values() if self._cap_ok(s.capability)]
 
     # -- dispatch ------------------------------------------------------------
-    async def dispatch(self, name: str, args: Dict[str, Any]) -> str:
+    async def dispatch(self, name: str, args: Dict[str, Any], emit: Emit = None) -> str:
         spec = self._specs.get(name)
         if not spec:
             return f"[unknown tool: {name}]"
-        if not self.permissions.is_granted(spec.capability):
+        if not self._cap_ok(spec.capability):
             return f"[blocked] The '{spec.capability}' permission is not granted, so '{name}' cannot run."
 
         try:
-            return await self._execute(name, args)
+            return await self._execute(name, args, emit)
         except DexterPermissionError as exc:
             return f"[blocked] {exc}"
         except Exception as exc:  # keep the loop alive; report back to the model
             return f"[error running {name}: {exc}]"
 
-    async def _execute(self, name: str, args: Dict[str, Any]) -> str:
+    async def _emit(self, emit: Emit, event: Dict[str, Any]) -> None:
+        if emit is not None:
+            try:
+                await emit(event)
+            except Exception:
+                pass
+
+    async def _execute(self, name: str, args: Dict[str, Any], emit: Emit = None) -> str:
+        # --- UI / multi-task tools ---
+        if name == "show_card":
+            card = {
+                "id": f"c{int(time.time()*1000)}",
+                "title": str(args.get("title", "")).strip() or "Info",
+                "body": str(args.get("body", "")).strip(),
+                "accent": str(args.get("accent", "cyan")).strip().lower() or "cyan",
+            }
+            await self._emit(emit, {"type": "card", **card})
+            return f"Card '{card['title']}' shown on screen."
+
+        if name == "clear_cards":
+            await self._emit(emit, {"type": "clear_cards"})
+            return "All cards cleared."
+
+        if name == "add_task":
+            self._task_seq += 1
+            task = {"id": f"t{self._task_seq}", "title": str(args.get("title", "")).strip(), "status": "pending"}
+            self.tasks.append(task)
+            await self._emit(emit, {"type": "task", "action": "add", "task": task})
+            return f"Task {task['id']} added: {task['title']}"
+
+        if name == "update_task":
+            tid = str(args.get("id", "")).strip()
+            status = str(args.get("status", "")).strip().lower()
+            for t in self.tasks:
+                if t["id"] == tid:
+                    t["status"] = status
+                    await self._emit(emit, {"type": "task", "action": "update", "task": t})
+                    return f"Task {tid} → {status}"
+            return f"[no such task: {tid}]"
+
         if name == "see_screen":
             question = args.get("question") or "Describe what is on the screen in detail, including any clickable UI elements and their approximate positions."
             image = vision.capture_screen()

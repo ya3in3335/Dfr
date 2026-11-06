@@ -69,9 +69,56 @@ class Settings:
     voice_name: str = field(default_factory=lambda: os.getenv("DEXTER_VOICE_NAME", "").strip())
     voice_rate: int = field(default_factory=lambda: int(os.getenv("DEXTER_VOICE_RATE", "175")))
 
+    # Voice engine: "system" (offline pyttsx3, played on the host) or
+    # "groq" (cloud neural TTS, streamed to the browser to play).
+    voice_engine: str = field(default_factory=lambda: os.getenv("DEXTER_VOICE_ENGINE", "system").strip().lower())
+
+    # Groq neural TTS (optional second voice option).
+    groq_api_key: str = field(default_factory=lambda: os.getenv("GROQ_API_KEY", "").strip())
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_tts_model: str = field(
+        default_factory=lambda: os.getenv("DEXTER_GROQ_TTS_MODEL", "canopylabs/orpheus-arabic-saudi").strip()
+    )
+    groq_voice: str = field(default_factory=lambda: os.getenv("DEXTER_GROQ_VOICE", "abdullah").strip())
+
+    # Wake word for always-on listening (comma-separated accepts several).
+    wake_word: str = field(default_factory=lambda: os.getenv("DEXTER_WAKE_WORD", "dexter").strip().lower())
+
     # Human-readable attribution sent to OpenRouter (optional, helps rankings).
     app_title: str = "Dexter Cyber"
     app_referer: str = "https://localhost/dexter-cyber"
+
+    def __post_init__(self) -> None:
+        # Apply persisted runtime preferences (overrides env defaults).
+        try:
+            import json
+
+            if self.prefs_file.exists():
+                prefs = json.loads(self.prefs_file.read_text(encoding="utf-8"))
+                if prefs.get("voice_engine") in ("system", "groq"):
+                    self.voice_engine = prefs["voice_engine"]
+                if isinstance(prefs.get("voice_enabled"), bool):
+                    self.voice_enabled = prefs["voice_enabled"]
+        except Exception:
+            pass
+
+    def save_prefs(self) -> None:
+        import json
+
+        try:
+            self.prefs_file.write_text(
+                json.dumps(
+                    {"voice_engine": self.voice_engine, "voice_enabled": self.voice_enabled},
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+
+    @property
+    def prefs_file(self) -> Path:
+        return self.home / "prefs.json"
 
     @property
     def consent_file(self) -> Path:
@@ -94,6 +141,10 @@ class Settings:
     @property
     def has_api_key(self) -> bool:
         return bool(self.openrouter_api_key)
+
+    @property
+    def has_groq_key(self) -> bool:
+        return bool(self.groq_api_key)
 
 
 settings = Settings()
