@@ -29,8 +29,8 @@ TARGET = {"idle": 0.22, "listening": 0.8, "thinking": 0.55, "speaking": 0.95}
 # Particle glow color (cool teal, like the reference). Tweak here to recolor.
 C_R, C_G, C_B = 120, 224, 232
 
-LAYERS = 6
-PER_LAYER = 92
+LAYERS = 9
+PER_LAYER = 170
 
 
 class OrbWidget(QWidget):
@@ -61,7 +61,7 @@ class OrbWidget(QWidget):
                     "ph": rnd.uniform(0, 2 * math.pi),
                     "jit": rnd.uniform(-1, 1),
                     "spray": rnd.random() < 0.14,
-                    "sz": rnd.uniform(1.0, 2.1),
+                    "sz": rnd.uniform(0.6, 1.4),
                     "b": rnd.uniform(0.45, 1.0),
                     "sp": rnd.uniform(0.8, 1.4),   # per-particle wave speed
                 })
@@ -137,12 +137,12 @@ class OrbWidget(QWidget):
 
             peak = 0.5 + 0.5 * (disp / 1.9)            # outward = brighter
             bright = max(0.0, min(1.0, pt["b"] * (0.4 + 0.7 * peak)))
-            alpha = int(55 + 165 * bright)
+            alpha = int(45 + 150 * bright)
             p.setBrush(QColor(C_R, C_G, C_B, alpha))
-            s = pt["sz"] * (1.0 + 0.45 * bright)
+            s = pt["sz"] * (1.0 + 0.4 * bright)
             p.drawEllipse(QPointF(x, y), s, s)
-            if bright > 0.82:                          # hottest points sparkle
-                p.setBrush(QColor(225, 252, 254, 175))
+            if bright > 0.85:                          # hottest points sparkle
+                p.setBrush(QColor(225, 252, 254, 170))
                 p.drawEllipse(QPointF(x, y), s * 0.5, s * 0.5)
         p.setCompositionMode(QPainter.CompositionMode_SourceOver)
 
