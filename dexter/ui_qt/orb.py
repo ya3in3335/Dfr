@@ -1,12 +1,12 @@
-"""The Dexter orb — a modern monochrome (black & gray) animated sphere.
+"""The Dexter orb — a glossy 3D glass sphere rendered with QPainter (grayscale).
 
-Drawn entirely with QPainter:
-* concentric gray rings + a rotating dashed ring (modern HUD feel),
-* a near-black core with a layered-sine waveform and caption,
-* an **invoke animation**: expanding ring bursts fired via ``pulse()`` whenever
-  Dexter is activated,
-* **audio reactivity**: ``set_level()`` drives the waveform amplitude and a
-  subtle scale so the orb visibly responds to the microphone / voice.
+Looks like a real translucent glass bead: volumetric spherical shading, a glowing
+bottom core, a bright glass rim, and soft specular highlights. Inside, liquid
+ripples drift continuously — gently when idle, stronger when listening/speaking
+— so the orb always "undulates". Everything is drawn graphically (no images).
+
+Public API: ``set_state``, ``set_caption``, ``set_level`` (audio reactive),
+``pulse`` (invoke burst).
 """
 from __future__ import annotations
 
@@ -21,13 +21,10 @@ CAPTIONS = {
     "idle": "Hi, how can I help you …",
     "listening": "Listening …",
     "thinking": "Processing …",
-    "speaking": "",
+    "speaking": "Speaking …",
 }
-TARGET = {"idle": 0.16, "listening": 0.6, "thinking": 0.45, "speaking": 0.9}
-
-WHITE = QColor(232, 234, 237)
-GRAY = QColor(120, 124, 132)
-GRAY_DIM = QColor(70, 72, 78)
+# idle is intentionally non-zero so the glass keeps rippling even when silent.
+TARGET = {"idle": 0.28, "listening": 0.75, "thinking": 0.55, "speaking": 0.95}
 
 
 class OrbWidget(QWidget):
@@ -35,13 +32,12 @@ class OrbWidget(QWidget):
         super().__init__(parent)
         self.setMinimumSize(320, 320)
         self._phase = 0.0
-        self._intensity = 0.16
-        self._target = 0.16
-        self._level = 0.0          # smoothed audio level (0..1)
+        self._intensity = 0.28
+        self._target = 0.28
+        self._level = 0.0
         self._state = "idle"
         self._caption = CAPTIONS["idle"]
-        self._spin = 0.0
-        self._pulses: list[float] = []   # start-times of invoke bursts
+        self._pulses: list[float] = []
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(16)
@@ -49,9 +45,11 @@ class OrbWidget(QWidget):
     # -- public API ----------------------------------------------------------
     def set_state(self, state: str):
         self._state = state
-        self._target = TARGET.get(state, 0.16)
+        self._target = TARGET.get(state, 0.28)
         if state != "speaking":
             self._caption = CAPTIONS.get(state, self._caption)
+        else:
+            self._caption = CAPTIONS["speaking"]
         self.update()
 
     def set_caption(self, text: str):
@@ -59,23 +57,20 @@ class OrbWidget(QWidget):
         self.update()
 
     def set_level(self, level: float):
-        """Live audio level (0..1) from the mic or voice output."""
-        self._level = max(self._level * 0.6, min(1.0, level))  # fast attack
+        self._level = max(self._level * 0.6, min(1.0, level))
 
     def pulse(self):
-        """Fire an invoke animation (expanding ring burst)."""
         self._pulses.append(time.monotonic())
-        self._target = max(self._target, 0.85)
+        self._target = max(self._target, 0.9)
 
     # -- animation -----------------------------------------------------------
     def _tick(self):
         reactive = max(self._target, self._level)
-        self._intensity += (reactive - self._intensity) * 0.14
-        self._level *= 0.90
-        self._phase += 0.03 + self._intensity * 0.14
-        self._spin += 0.5
+        self._intensity += (reactive - self._intensity) * 0.12
+        self._level *= 0.9
+        self._phase += 0.02 + self._intensity * 0.10
         now = time.monotonic()
-        self._pulses = [t for t in self._pulses if now - t < 1.1]
+        self._pulses = [t for t in self._pulses if now - t < 1.2]
         self.update()
 
     # -- painting ------------------------------------------------------------
@@ -83,110 +78,126 @@ class OrbWidget(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         w, h = self.width(), self.height()
-        cx, cy = w / 2, h / 2
-        base = min(w, h) / 2 * 0.92
-        R = base * (1.0 + 0.03 * self._intensity)   # subtle scale with intensity
+        cx, cy = w / 2, h / 2 - h * 0.02
+        Rs = min(w, h) / 2 * 0.80
 
-        # soft outer glow (white, low alpha)
-        glow = QRadialGradient(cx, cy, R * 1.2)
-        a = int(40 + 70 * self._intensity)
-        glow.setColorAt(0.0, QColor(255, 255, 255, a))
-        glow.setColorAt(0.5, QColor(160, 164, 172, int(a * 0.4)))
-        glow.setColorAt(1.0, QColor(0, 0, 0, 0))
-        p.setPen(Qt.NoPen); p.setBrush(glow)
-        p.drawEllipse(QPointF(cx, cy), R * 1.18, R * 1.18)
+        self._halo(p, cx, cy, Rs)
+        self._pulse_rings(p, cx, cy, Rs)
 
-        # invoke pulses — expanding fading rings
-        for t in self._pulses:
-            prog = (time.monotonic() - t) / 1.1
-            if prog < 0 or prog > 1:
-                continue
-            rr = R * (0.6 + prog * 0.6)
-            alpha = int(180 * (1 - prog))
-            pen = QPen(QColor(255, 255, 255, alpha)); pen.setWidthF(2.0)
-            p.setPen(pen); p.setBrush(Qt.NoBrush)
-            p.drawEllipse(QPointF(cx, cy), rr, rr)
+        sphere = QPainterPath()
+        sphere.addEllipse(QPointF(cx, cy), Rs, Rs)
 
-        # rings (grayscale)
-        self._ring(p, cx, cy, R * 0.86, R * 0.012, GRAY_DIM)
-        self._dashed_ring(p, cx, cy, R * 0.80, R * 0.006, self._spin)
-        self._ring(p, cx, cy, R * 0.68, R * 0.018, GRAY)
-        self._ring(p, cx, cy, R * 0.60, 1.6, WHITE, glow=True)
+        self._body(p, cx, cy, Rs, sphere)
+        self._bottom_glow(p, cx, cy, Rs, sphere)
+        self._ripples(p, cx, cy, Rs, sphere)
+        self._rim(p, cx, cy, Rs)
+        self._speculars(p, cx, cy, Rs, sphere)
 
-        # rotating highlight arc
-        self._arc(p, cx, cy, R * 0.68, R * 0.018, self._spin * 1.2,
-                  QColor(255, 255, 255, 180), span=55)
-
-        # dark core
-        coreR = R * 0.56
-        core = QRadialGradient(cx, cy - coreR * 0.1, coreR)
-        core.setColorAt(0.0, QColor(46, 48, 54, 220))
-        core.setColorAt(0.55, QColor(18, 18, 21, 240))
-        core.setColorAt(1.0, QColor(8, 8, 10, 255))
-        p.setBrush(core); p.setPen(Qt.NoPen)
-        p.drawEllipse(QPointF(cx, cy), coreR, coreR)
-
-        # waveform + caption inside the core
-        p.save()
-        p.setClipPath(self._circle(cx, cy, coreR * 0.98))
-        self._waveform(p, cx, cy - coreR * 0.12, coreR * 1.5, coreR * 0.5)
-        p.restore()
-        self._caption_text(p, cx, cy + coreR * 0.42, coreR * 1.5)
+        self._caption_text(p, cx, cy + Rs + min(w, h) * 0.035, Rs * 2)
         p.end()
 
-    def _circle(self, cx, cy, r):
-        path = QPainterPath(); path.addEllipse(QPointF(cx, cy), r, r); return path
+    def _halo(self, p, cx, cy, Rs):
+        g = QRadialGradient(cx, cy, Rs * 1.35)
+        a = int(28 + 55 * self._intensity)
+        g.setColorAt(0.6, QColor(190, 196, 206, a))
+        g.setColorAt(1.0, QColor(0, 0, 0, 0))
+        p.setPen(Qt.NoPen); p.setBrush(g)
+        p.drawEllipse(QPointF(cx, cy), Rs * 1.32, Rs * 1.32)
 
-    def _ring(self, p, cx, cy, radius, width, color: QColor, glow=False):
-        if glow:
-            pen = QPen(QColor(color.red(), color.green(), color.blue(), 60))
-            pen.setWidthF(width * 3.2); p.setPen(pen); p.setBrush(Qt.NoBrush)
-            p.drawEllipse(QPointF(cx, cy), radius, radius)
-        pen = QPen(color); pen.setWidthF(width)
-        p.setPen(pen); p.setBrush(Qt.NoBrush)
-        p.drawEllipse(QPointF(cx, cy), radius, radius)
+    def _pulse_rings(self, p, cx, cy, Rs):
+        now = time.monotonic()
+        for t in self._pulses:
+            prog = (now - t) / 1.2
+            if 0 <= prog <= 1:
+                rr = Rs * (1.0 + prog * 0.45)
+                pen = QPen(QColor(235, 238, 242, int(150 * (1 - prog))))
+                pen.setWidthF(2.0)
+                p.setPen(pen); p.setBrush(Qt.NoBrush)
+                p.drawEllipse(QPointF(cx, cy), rr, rr)
 
-    def _dashed_ring(self, p, cx, cy, radius, width, angle):
-        pen = QPen(QColor(150, 154, 162, 150)); pen.setWidthF(max(1.0, width))
-        pen.setDashPattern([1, 5]); pen.setCapStyle(Qt.RoundCap)
-        p.setPen(pen); p.setBrush(Qt.NoBrush)
-        p.save(); p.translate(cx, cy); p.rotate(angle * 0.3)
-        p.drawEllipse(QPointF(0, 0), radius, radius); p.restore()
+    def _body(self, p, cx, cy, Rs, sphere):
+        # volumetric sphere shading — translucent, darker at the top/edges
+        g = QRadialGradient(cx, cy - Rs * 0.22, Rs * 1.18)
+        g.setColorAt(0.0, QColor(150, 155, 163, 180))
+        g.setColorAt(0.55, QColor(92, 96, 104, 175))
+        g.setColorAt(0.85, QColor(42, 44, 50, 205))
+        g.setColorAt(1.0, QColor(16, 17, 20, 235))
+        p.setPen(Qt.NoPen); p.setBrush(g)
+        p.drawPath(sphere)
 
-    def _arc(self, p, cx, cy, radius, width, angle, color, span=55):
-        pen = QPen(color); pen.setWidthF(width); pen.setCapStyle(Qt.RoundCap)
-        p.setPen(pen); p.setBrush(Qt.NoBrush)
-        rect = QRectF(cx - radius, cy - radius, radius * 2, radius * 2)
-        p.drawArc(rect, int(-angle * 16), int(span * 16))
+    def _bottom_glow(self, p, cx, cy, Rs, sphere):
+        # the glowing light core near the bottom (brightens with intensity)
+        p.save(); p.setClipPath(sphere)
+        k = 0.45 + 0.55 * self._intensity
+        g = QRadialGradient(cx, cy + Rs * 0.42, Rs * 1.05)
+        g.setColorAt(0.0, QColor(235, 238, 243, int(210 * k)))
+        g.setColorAt(0.35, QColor(170, 175, 183, int(110 * k)))
+        g.setColorAt(0.8, QColor(90, 94, 102, 0))
+        g.setColorAt(1.0, QColor(0, 0, 0, 0))
+        p.setPen(Qt.NoPen); p.setBrush(g)
+        p.drawPath(sphere)
+        p.restore()
 
-    def _waveform(self, p, cx, cy, width, height):
-        lines = 9
-        half = width / 2
-        for l in range(lines):
-            lp = l / (lines - 1) - 0.5
-            amp = height * self._intensity * (1 - abs(lp) * 0.5)
-            alpha = 0.12 + 0.20 * (1 - abs(lp) * 1.3)
-            pen = QPen(QColor(232, 234, 237, int(255 * max(0.05, alpha))))
-            pen.setWidthF(1.1); p.setPen(pen)
+    def _ripples(self, p, cx, cy, Rs, sphere):
+        # soft liquid waves drifting through the lower half of the glass
+        p.save(); p.setClipPath(sphere)
+        lines = 7
+        drift = math.sin(self._phase * 0.5) * Rs * 0.04   # whole body sloshes
+        for i in range(lines):
+            fy = -0.12 + (i / (lines - 1)) * 0.62          # biased to lower half
+            yc = cy + fy * Rs + drift
+            fade = 1 - max(0.0, fy) * 0.5
+            amp = Rs * (0.045 + 0.075 * self._intensity) * fade
+            alpha = int(255 * (0.035 + 0.055 * fade))
+            pen = QPen(QColor(228, 232, 238, max(8, alpha)))
+            pen.setWidthF(1.6); pen.setCapStyle(Qt.RoundCap); p.setPen(pen)
             path = QPainterPath(); steps = 90
             for s in range(steps + 1):
                 t = s / steps
-                x = cx - half + t * width
-                env = math.exp(-((t - 0.5) * 3.2) ** 2)
-                y = cy + (math.sin(t * 15 + self._phase + lp * 2.4) * amp * env
-                          + math.sin(t * 7 - self._phase * 0.6) * amp * env * 0.35)
+                x = cx - Rs + t * 2 * Rs
+                env = math.sin(math.pi * t) ** 1.3         # fade at the sides
+                y = yc + math.sin(t * 7 + self._phase + fy * 2.2) * amp * env \
+                       + math.sin(t * 3.3 - self._phase * 0.6) * amp * 0.45 * env
                 path.moveTo(x, y) if s == 0 else path.lineTo(x, y)
             p.drawPath(path)
-        node = QRadialGradient(cx, cy, width * 0.12)
-        node.setColorAt(0.0, QColor(255, 255, 255, int(150 * (0.4 + self._intensity))))
-        node.setColorAt(1.0, QColor(255, 255, 255, 0))
-        p.setBrush(node); p.setPen(Qt.NoPen)
-        p.drawEllipse(QPointF(cx, cy), width * 0.12, width * 0.12)
+        p.restore()
+
+    def _rim(self, p, cx, cy, Rs):
+        # bright glass rim around the circumference
+        g = QRadialGradient(cx, cy, Rs)
+        g.setColorAt(0.0, QColor(255, 255, 255, 0))
+        g.setColorAt(0.82, QColor(200, 205, 212, 0))
+        g.setColorAt(0.9, QColor(210, 215, 222, 70))
+        g.setColorAt(0.965, QColor(240, 243, 247, 180))
+        g.setColorAt(1.0, QColor(255, 255, 255, 25))
+        p.setPen(Qt.NoPen); p.setBrush(g)
+        p.drawEllipse(QPointF(cx, cy), Rs, Rs)
+
+    def _speculars(self, p, cx, cy, Rs, sphere):
+        p.save(); p.setClipPath(sphere)
+        # large soft highlight, upper area
+        self._blob(p, cx - Rs * 0.18, cy - Rs * 0.52, Rs * 0.62, Rs * 0.34, -18, 185)
+        # secondary highlight, upper right
+        self._blob(p, cx + Rs * 0.34, cy - Rs * 0.34, Rs * 0.26, Rs * 0.5, 28, 120)
+        # tiny crisp hotspot
+        self._blob(p, cx - Rs * 0.28, cy - Rs * 0.44, Rs * 0.12, Rs * 0.09, 0, 230)
+        p.restore()
+
+    def _blob(self, p, x, y, rx, ry, rot, alpha):
+        p.save(); p.translate(x, y); p.rotate(rot)
+        g = QRadialGradient(0, 0, max(rx, ry))
+        g.setColorAt(0.0, QColor(255, 255, 255, alpha))
+        g.setColorAt(0.5, QColor(245, 247, 250, int(alpha * 0.4)))
+        g.setColorAt(1.0, QColor(255, 255, 255, 0))
+        p.setPen(Qt.NoPen); p.setBrush(g)
+        p.scale(1.0, ry / rx if rx else 1.0)
+        p.drawEllipse(QPointF(0, 0), rx, rx)
+        p.restore()
 
     def _caption_text(self, p, cx, cy, maxw):
         if not self._caption:
             return
-        f = QFont("Segoe UI"); f.setPixelSize(max(12, int(self.width() * 0.015)))
-        p.setFont(f); p.setPen(QColor(210, 213, 218))
-        rect = QRectF(cx - maxw / 2, cy - 18, maxw, 44)
-        p.drawText(rect, Qt.AlignHCenter | Qt.AlignVCenter | Qt.TextWordWrap, self._caption)
+        f = QFont("Segoe UI"); f.setPixelSize(max(12, int(self.width() * 0.014)))
+        p.setFont(f); p.setPen(QColor(150, 155, 163))
+        rect = QRectF(cx - maxw / 2, cy - 14, maxw, 30)
+        p.drawText(rect, Qt.AlignHCenter | Qt.AlignVCenter, self._caption)
