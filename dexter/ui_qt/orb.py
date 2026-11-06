@@ -39,7 +39,7 @@ MOODS = {
 }
 STATE_MOOD = {"idle": "calm", "listening": "listening", "thinking": "thinking", "speaking": "speaking"}
 
-C_R, C_G, C_B = 120, 224, 232          # cool teal glow
+C_R, C_G, C_B = 205, 212, 222          # cool light-gray glow (monochrome)
 N_PARTICLES = 2300
 
 
@@ -176,7 +176,7 @@ class OrbWidget(QWidget):
             s = pt["sz"] * (1.0 + 0.35 * bright)
             p.drawEllipse(QPointF(x, y), s, s)
             if bright > 0.9:
-                p.setBrush(QColor(225, 252, 254, 150))
+                p.setBrush(QColor(236, 239, 243, 150))
                 p.drawEllipse(QPointF(x, y), s * 0.45, s * 0.45)
         p.setCompositionMode(QPainter.CompositionMode_SourceOver)
 
@@ -193,7 +193,7 @@ class OrbWidget(QWidget):
         p.setBrush(g)
         p.drawEllipse(QPointF(cx, cy), R * 0.8, R * 0.78)
         g2 = QRadialGradient(cx, cy, R * 0.16)
-        g2.setColorAt(0.0, QColor(185, 242, 246, int((55 + 55 * inten) * bright)))
+        g2.setColorAt(0.0, QColor(225, 230, 236, int((55 + 55 * inten) * bright)))
         g2.setColorAt(1.0, QColor(0, 0, 0, 0))
         p.setBrush(g2)
         p.drawEllipse(QPointF(cx, cy), R * 0.16, R * 0.16)
@@ -202,6 +202,6 @@ class OrbWidget(QWidget):
         if not self._caption:
             return
         f = QFont("Segoe UI"); f.setPixelSize(max(12, int(self.width() * 0.014)))
-        p.setFont(f); p.setPen(QColor(150, 175, 180))
+        p.setFont(f); p.setPen(QColor(150, 155, 163))
         rect = QRectF(cx - maxw / 2, cy - 14, maxw, 30)
         p.drawText(rect, Qt.AlignHCenter | Qt.AlignVCenter, self._caption)

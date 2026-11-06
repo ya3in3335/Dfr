@@ -6,10 +6,19 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import (QApplication, QCheckBox, QDialog, QFrame, QHBoxLayout,
-                               QLabel, QLineEdit, QPushButton, QScrollArea,
+from PySide6.QtGui import QIcon, QColor
+from PySide6.QtWidgets import (QApplication, QCheckBox, QDialog, QFrame, QGraphicsDropShadowEffect,
+                               QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
                                QVBoxLayout, QWidget)
+
+
+def shadow(widget, blur: int = 26, dy: int = 7, alpha: int = 170):
+    """Attach a soft drop shadow for a raised 3D look."""
+    eff = QGraphicsDropShadowEffect(widget)
+    eff.setBlurRadius(blur); eff.setXOffset(0); eff.setYOffset(dy)
+    eff.setColor(QColor(0, 0, 0, alpha))
+    widget.setGraphicsEffect(eff)
+    return eff
 
 from .. import __version__
 from ..config import resource_path, settings
@@ -106,12 +115,12 @@ class DexterWindow(QWidget):
 
         right = QVBoxLayout(); right.setSpacing(10)
         right.addWidget(self._label("ACTIVITY", "tasks"))
-        self.feed_area, self.feed_layout = self._scroll()
-        right.addWidget(self.feed_area, 3)
+        feed_frame, self.feed_area, self.feed_layout = self._scroll()
+        right.addWidget(feed_frame, 3)
         right.addWidget(self._label("TASKS", "tasks"))
-        self.tasks_area, self.tasks_layout = self._scroll()
-        self.tasks_area.setMaximumHeight(170)
-        right.addWidget(self.tasks_area, 1)
+        tasks_frame, self.tasks_area, self.tasks_layout = self._scroll()
+        tasks_frame.setMaximumHeight(190)
+        right.addWidget(tasks_frame, 1)
         rw = QWidget(); rw.setLayout(right); rw.setMinimumWidth(380)
         body.addWidget(rw, 2)
         root.addLayout(body, 1)
@@ -127,6 +136,7 @@ class DexterWindow(QWidget):
         send.setIcon(icons.icon("send", 20, "#04121a")); send.setIconSize(QSize(20, 20))
         send.clicked.connect(self._send)
         comp.addWidget(self.mic); comp.addWidget(self.input, 1); comp.addWidget(send)
+        shadow(self.mic, 18, 5, 150); shadow(send, 20, 6, 170)
         root.addLayout(comp)
 
         self._refresh_status()
@@ -138,11 +148,16 @@ class DexterWindow(QWidget):
         return w
 
     def _scroll(self):
+        # a raised 3D panel card wrapping a transparent scroll area
+        outer = QFrame(); outer.setObjectName("panelCard")
+        ol = QVBoxLayout(outer); ol.setContentsMargins(8, 8, 8, 8)
         area = QScrollArea(); area.setWidgetResizable(True); area.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget(); lay = QVBoxLayout(inner); lay.setContentsMargins(4, 4, 4, 4)
+        area.setStyleSheet("background:transparent;")
+        inner = QWidget(); inner.setStyleSheet("background:transparent;")
+        lay = QVBoxLayout(inner); lay.setContentsMargins(4, 4, 4, 4)
         lay.setSpacing(8); lay.addStretch(1)
-        area.setWidget(inner)
-        return area, lay
+        area.setWidget(inner); ol.addWidget(area)
+        return outer, area, lay
 
     # ---- status ----
     def _refresh_status(self):
@@ -281,6 +296,7 @@ class DexterWindow(QWidget):
         frame.setStyleSheet(f"#card{{border:1px solid {accent};}}")
         cid = c.get("id", str(id(frame)))
         x.clicked.connect(lambda: self._remove_card(cid))
+        shadow(frame, 26, 8, 185)
         self.cards[cid] = frame
         self._insert(self.feed_layout, frame)
         self._scroll_bottom(self.feed_area)

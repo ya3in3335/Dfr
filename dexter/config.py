@@ -71,9 +71,9 @@ class Settings:
 
     # Voice engine: "system" (offline pyttsx3, played on the host) or
     # "groq" (cloud neural TTS, streamed to the browser to play).
-    voice_engine: str = field(default_factory=lambda: os.getenv("DEXTER_VOICE_ENGINE", "system").strip().lower())
+    voice_engine: str = field(default_factory=lambda: os.getenv("DEXTER_VOICE_ENGINE", "groq").strip().lower())
 
-    # Groq neural TTS (optional second voice option).
+    # Groq neural TTS.
     groq_api_key: str = field(default_factory=lambda: os.getenv("GROQ_API_KEY", "").strip())
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_tts_model: str = field(
