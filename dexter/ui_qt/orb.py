@@ -29,8 +29,8 @@ TARGET = {"idle": 0.22, "listening": 0.8, "thinking": 0.55, "speaking": 0.95}
 # Particle glow color (cool teal, like the reference). Tweak here to recolor.
 C_R, C_G, C_B = 120, 224, 232
 
-LAYERS = 9
-PER_LAYER = 170
+LAYERS = 12
+PER_LAYER = 250
 
 
 class OrbWidget(QWidget):
