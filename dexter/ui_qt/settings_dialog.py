@@ -24,7 +24,7 @@ class SettingsDialog(QDialog):
         self.on_saved = on_saved
         self.setWindowTitle("Dexter Cyber — Settings")
         self.setMinimumWidth(560)
-        self.setStyleSheet(QSS)
+        self.setStyleSheet(QSS + "\nQDialog{background:#0a0a0b;}")
         self._build()
 
     def _build(self):
@@ -39,7 +39,9 @@ class SettingsDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("background:transparent;")
         body = QWidget()
+        body.setStyleSheet("background:transparent;")
         form = QVBoxLayout(body)
         form.setSpacing(10)
 
@@ -49,13 +51,18 @@ class SettingsDialog(QDialog):
         key_row.setObjectName("hint")
         form.addWidget(key_row)
 
-        self.openrouter = self._secret_field(settings.openrouter_api_key)
-        self.groq = self._secret_field(settings.groq_api_key)
+        self.openrouter = self._secret_field(settings.openrouter_api_key,
+                                             "ضع مفتاح OpenRouter هنا — يبدأ بـ  sk-or-v1-…")
+        self.groq = self._secret_field(settings.groq_api_key,
+                                       "ضع مفتاح Groq هنا — يبدأ بـ  gsk_…")
         f1 = QFormLayout(); f1.setSpacing(10)
-        f1.addRow(self._keyed("OpenRouter key"), self.openrouter)
-        f1.addRow(self._keyed("Groq key"), self.groq)
+        f1.addRow(self._keyed("OpenRouter  ·  sk-or-v1-…"), self.openrouter)
+        f1.addRow(self._keyed("Groq  ·  gsk_…"), self.groq)
         form.addLayout(f1)
-        link = QLabel('<a style="color:#35e4ff;" href="#">openrouter.ai/keys · console.groq.com/keys</a>')
+        hint = QLabel("المفتاح الذي يبدأ بـ sk-or-v1- في خانة OpenRouter،  والذي يبدأ بـ gsk_ في خانة Groq.")
+        hint.setObjectName("hint"); hint.setWordWrap(True)
+        form.addWidget(hint)
+        link = QLabel('<a style="color:#cfd3da;" href="#">openrouter.ai/keys · console.groq.com/keys</a>')
         link.setObjectName("hint")
         form.addWidget(link)
 
@@ -121,10 +128,10 @@ class SettingsDialog(QDialog):
         l.addWidget(QLabel(text)); l.addStretch(1)
         return w
 
-    def _secret_field(self, value: str) -> QLineEdit:
+    def _secret_field(self, value: str, placeholder: str = "paste key…") -> QLineEdit:
         e = QLineEdit(value)
         e.setEchoMode(QLineEdit.EchoMode.Password)
-        e.setPlaceholderText("paste key…")
+        e.setPlaceholderText(placeholder)
         show = e.addAction(icons.icon("eye", 16, INK_DIM), QLineEdit.ActionPosition.TrailingPosition)
         show.triggered.connect(lambda: e.setEchoMode(
             QLineEdit.EchoMode.Normal if e.echoMode() == QLineEdit.EchoMode.Password else QLineEdit.EchoMode.Password))
