@@ -63,6 +63,41 @@ class Settings:
     # longer free (OpenRouter 404 "unavailable for free").
     free_fallback_model: str = "openrouter/free"
 
+    # Several free models that work together: tried in order, the next one is
+    # used automatically on rate-limit / unavailability. Override with a
+    # comma-separated DEXTER_TEXT_MODELS / DEXTER_VISION_MODELS.
+    text_fallbacks: tuple = (
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "dots-studio/dots-3-note-preview:free",
+        "recursive/flint-v1.0:free",
+        "cohere/north-mini-code:free",
+        "nvidia/nemotron-3.5-super-vl:free",
+        "google/gemma-4-31b-it:free",
+    )
+    vision_fallbacks: tuple = (
+        "openrouter/free",
+    )
+
+    def _dedup(self, items):
+        seen, out = set(), []
+        for m in items:
+            m = (m or "").strip()
+            if m and m not in seen:
+                seen.add(m); out.append(m)
+        return out
+
+    def text_chain(self):
+        env = os.getenv("DEXTER_TEXT_MODELS", "")
+        if env.strip():
+            return self._dedup(env.split(","))
+        return self._dedup([self.text_model, *self.text_fallbacks])
+
+    def vision_chain(self):
+        env = os.getenv("DEXTER_VISION_MODELS", "")
+        if env.strip():
+            return self._dedup(env.split(","))
+        return self._dedup([self.vision_model, *self.vision_fallbacks])
+
     home: Path = field(default_factory=_home)
 
     host: str = field(default_factory=lambda: os.getenv("DEXTER_HOST", "127.0.0.1"))

@@ -1,8 +1,9 @@
-"""OpenRouter client (OpenAI-compatible chat completions).
+"""OpenRouter client with multi-model fallback (free models working together).
 
-Works with the free models on OpenRouter (the ``:free`` variants). Supports
-plain text as well as multimodal messages carrying an image, which Dexter uses
-to let the model "see" the screen.
+A chat request tries a chain of free models in order; on rate-limit (429),
+unavailability (404 "unavailable for free"), server error, or an empty reply it
+moves to the next model automatically. A genuine auth error (401) stops early.
+Supports multimodal messages carrying an image for screen vision.
 """
 from __future__ import annotations
 
@@ -19,12 +20,7 @@ class LLMError(RuntimeError):
 
 
 class OpenRouterClient:
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        timeout: float = 120.0,
-    ):
+    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, timeout: float = 120.0):
         self.api_key = (api_key or settings.openrouter_api_key).strip()
         self.base_url = (base_url or settings.openrouter_base_url).rstrip("/")
         self.timeout = timeout
@@ -37,65 +33,69 @@ class OpenRouterClient:
         return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            # Optional attribution headers recommended by OpenRouter.
             "HTTP-Referer": settings.app_referer,
             "X-Title": settings.app_title,
         }
 
-    async def chat(
-        self,
-        messages: List[Dict[str, Any]],
-        model: Optional[str] = None,
-        temperature: float = 0.3,
-        max_tokens: int = 1536,
-        response_json: bool = False,
-    ) -> str:
-        """Send a chat completion request and return the assistant text."""
-        if not self.configured:
-            raise LLMError(
-                "No OpenRouter API key configured. Set OPENROUTER_API_KEY in your .env file "
-                "(get a free key at https://openrouter.ai/keys)."
-            )
-
+    async def _request(self, model: str, messages, temperature, max_tokens, response_json) -> str:
         payload: Dict[str, Any] = {
-            "model": model or settings.text_model,
+            "model": model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
         if response_json:
             payload["response_format"] = {"type": "json_object"}
-
         url = f"{self.base_url}/chat/completions"
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.post(url, headers=self._headers(), json=payload)
-                # Auto-recover when the chosen model is no longer free.
-                if resp.status_code == 404 and payload["model"] != settings.free_fallback_model:
-                    low = resp.text.lower()
-                    if "unavailable for free" in low or "use this slug" in low or "no endpoints" in low:
-                        payload["model"] = settings.free_fallback_model
-                        resp = await client.post(url, headers=self._headers(), json=payload)
         except httpx.HTTPError as exc:
-            raise LLMError(f"Network error reaching OpenRouter: {exc}") from exc
+            raise LLMError(f"network: {exc}") from exc
 
         if resp.status_code == 401:
-            raise LLMError("OpenRouter rejected the API key (401). Check OPENROUTER_API_KEY.")
+            raise LLMError("OpenRouter rejected the API key (401). Check your OpenRouter key in Settings.")
         if resp.status_code == 402:
-            raise LLMError(
-                "OpenRouter returned 402 (payment required). The selected model may not be free; "
-                "pick a ':free' model in your .env."
-            )
+            raise LLMError(f"{model}: 402 (not free)")
         if resp.status_code == 429:
-            raise LLMError("Rate limited by OpenRouter (429). Wait a moment and try again.")
+            raise LLMError(f"{model}: rate limited (429)")
         if resp.status_code >= 400:
-            raise LLMError(f"OpenRouter error {resp.status_code}: {resp.text[:500]}")
-
-        data = resp.json()
+            raise LLMError(f"{model}: {resp.status_code} {resp.text[:200]}")
         try:
-            return data["choices"][0]["message"]["content"] or ""
-        except (KeyError, IndexError, TypeError) as exc:
-            raise LLMError(f"Unexpected response shape from OpenRouter: {data}") from exc
+            data = resp.json()
+            return data["choices"][0]["message"].get("content") or ""
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise LLMError(f"{model}: bad response ({exc})") from exc
+
+    async def chat(
+        self,
+        messages: List[Dict[str, Any]],
+        model: Optional[str] = None,
+        models: Optional[List[str]] = None,
+        temperature: float = 0.3,
+        max_tokens: int = 1536,
+        response_json: bool = False,
+    ) -> str:
+        """Try a chain of models; return the first non-empty reply."""
+        if not self.configured:
+            raise LLMError(
+                "No OpenRouter API key set. Open Settings and paste your key "
+                "(starts with sk-or-v1-…) from https://openrouter.ai/keys."
+            )
+        chain = [model] if model else (models or settings.text_chain())
+        last: Optional[LLMError] = None
+        for mdl in chain:
+            try:
+                content = await self._request(mdl, messages, temperature, max_tokens, response_json)
+                if content and content.strip():
+                    return content
+                last = LLMError(f"{mdl}: empty response")
+            except LLMError as exc:
+                if "(401)" in str(exc):
+                    raise                      # auth error won't differ per model
+                last = exc
+                continue
+        raise last or LLMError("No model returned a response.")
 
     async def chat_with_image(
         self,
@@ -105,7 +105,6 @@ class OpenRouterClient:
         system: Optional[str] = None,
         max_tokens: int = 1024,
     ) -> str:
-        """Ask a vision-capable model about an image (e.g. a screenshot)."""
         b64 = base64.b64encode(image_bytes).decode("ascii")
         data_url = f"data:image/png;base64,{b64}"
         content = [
@@ -116,9 +115,5 @@ class OpenRouterClient:
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": content})
-        return await self.chat(
-            messages,
-            model=model or settings.vision_model,
-            temperature=0.2,
-            max_tokens=max_tokens,
-        )
+        chain = [model] if model else settings.vision_chain()
+        return await self.chat(messages, models=chain, temperature=0.2, max_tokens=max_tokens)

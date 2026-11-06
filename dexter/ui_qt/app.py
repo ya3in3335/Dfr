@@ -166,7 +166,9 @@ class DexterWindow(QWidget):
             self.status.setText("⚠ set OpenRouter key in Settings")
             self.orb.set_caption("Open Settings → add your OpenRouter key")
         else:
-            self.status.setText(f"{st['text_model'].split('/')[-1]}  ·  voice: {st['voice_engine']}")
+            n = len(settings.text_chain())
+            primary = settings.text_chain()[0].split("/")[-1]
+            self.status.setText(f"{primary}  ·  {n} models  ·  voice: {st['voice_engine']}")
 
     # ---- actions ----
     def _send(self, text: str | None = None):
