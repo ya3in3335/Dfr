@@ -60,9 +60,12 @@ class SplashScreen(QWidget):
     def _tick(self):
         t = time.monotonic() - self._t0
         if t > DURATION:
-            op = max(0.0, 1.0 - (t - DURATION) / FADE)
-            self.setWindowOpacity(op)
-            if op <= 0.01 and not self._done:
+            try:
+                self.setWindowOpacity(max(0.0, 1.0 - (t - DURATION) / FADE))
+            except Exception:
+                pass
+            # Time-based finish so it always closes, even if opacity is ignored.
+            if t >= DURATION + FADE and not self._done:
                 self._done = True
                 self._timer.stop()
                 self.finished.emit()

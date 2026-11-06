@@ -5,7 +5,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtGui import QIcon, QColor
 from PySide6.QtWidgets import (QApplication, QCheckBox, QDialog, QFrame, QGraphicsDropShadowEffect,
                                QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
@@ -373,35 +373,66 @@ class DexterWindow(QWidget):
         super().closeEvent(e)
 
 
+def _log_error(tb: str) -> None:
+    import datetime, tempfile
+    body = f"{datetime.datetime.now().isoformat()}\n{tb}\n"
+    for p in (Path.cwd() / "DexterCyber-error.log", Path(tempfile.gettempdir()) / "DexterCyber-error.log"):
+        try:
+            p.write_text(body, encoding="utf-8")
+        except Exception:
+            pass
+    print(body)
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Dexter Cyber")
-    icon_path = resource_path("assets/dexter.png")
-    if icon_path.exists():
-        app.setWindowIcon(QIcon(str(icon_path)))
-
-    # Animated splash first; heavy init runs while it plays.
-    from .splash import SplashScreen
-    splash = SplashScreen()
-    splash.show()
-    app.processEvents()
+    try:
+        icon_path = resource_path("assets/dexter.png")
+        if icon_path.exists():
+            app.setWindowIcon(QIcon(str(icon_path)))
+    except Exception:
+        pass
 
     loop = AsyncLoop(); loop.start()
     assistant = Assistant()
+    holder = {"shown": False}
 
-    holder = {}
+    def show_main():
+        if holder["shown"]:
+            return
+        holder["shown"] = True
+        try:
+            sp = holder.get("splash")
+            if sp is not None:
+                sp.close()
+            if not assistant.permissions.has_consented:
+                dlg = ConsentDialog(assistant)
+                dlg.setStyleSheet(QSS)
+                if dlg.exec() != QDialog.DialogCode.Accepted:
+                    app.quit(); return
+            win = DexterWindow(assistant, loop)
+            holder["win"] = win
+            win.show(); win.raise_(); win.activateWindow()
+        except Exception:
+            import traceback
+            _log_error(traceback.format_exc())
+            app.quit()
 
-    def after_splash():
-        if not assistant.permissions.has_consented:
-            dlg = ConsentDialog(assistant)
-            dlg.setStyleSheet(QSS)
-            if dlg.exec() != QDialog.DialogCode.Accepted:
-                app.quit(); return
-        win = DexterWindow(assistant, loop)
-        holder["win"] = win
-        win.show(); win.raise_(); win.activateWindow()
+    # The splash is optional eye-candy — it must never block startup.
+    try:
+        from .splash import SplashScreen
+        splash = SplashScreen()
+        holder["splash"] = splash
+        splash.finished.connect(show_main)
+        splash.show()
+        app.processEvents()
+    except Exception:
+        import traceback
+        _log_error(traceback.format_exc())
 
-    splash.finished.connect(after_splash)
+    # Hard guarantee: show the main window even if the splash never finishes.
+    QTimer.singleShot(3600, show_main)
     return app.exec()
 
 
