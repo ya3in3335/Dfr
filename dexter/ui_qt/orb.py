@@ -117,13 +117,14 @@ class OrbWidget(QWidget):
                 p.drawEllipse(QPointF(cx, cy), rr, rr)
 
     def _body(self, p, cx, cy, Rs, sphere):
-        # volume: lit from upper-left, falling off to a darker translucent edge
-        g = QRadialGradient(cx - Rs * 0.28, cy - Rs * 0.30, Rs * 1.45)
-        g.setColorAt(0.0, QColor(168, 173, 181, 185))
-        g.setColorAt(0.45, QColor(108, 113, 121, 180))
-        g.setColorAt(0.80, QColor(52, 55, 62, 200))
-        g.setColorAt(0.97, QColor(26, 27, 32, 230))
-        g.setColorAt(1.0, QColor(14, 15, 18, 240))
+        # clear water-drop body: mostly transparent (you see the black through
+        # it), gently lit upper-left, darkening to a thin dense edge
+        g = QRadialGradient(cx - Rs * 0.26, cy - Rs * 0.30, Rs * 1.5)
+        g.setColorAt(0.0, QColor(150, 156, 165, 120))
+        g.setColorAt(0.42, QColor(70, 74, 82, 110))
+        g.setColorAt(0.72, QColor(34, 36, 42, 140))
+        g.setColorAt(0.93, QColor(20, 21, 26, 195))
+        g.setColorAt(1.0, QColor(10, 11, 14, 235))
         p.setPen(Qt.NoPen); p.setBrush(g)
         p.drawPath(sphere)
 
@@ -140,27 +141,27 @@ class OrbWidget(QWidget):
     def _caustic(self, p, cx, cy, Rs, sphere):
         # focused bright spot where light converges through the glass (bottom)
         p.save(); p.setClipPath(sphere)
-        k = 0.5 + 0.5 * self._intensity
-        g = QRadialGradient(cx + Rs * 0.05, cy + Rs * 0.46, Rs * 0.7)
-        g.setColorAt(0.0, QColor(248, 250, 253, int(230 * k)))
-        g.setColorAt(0.28, QColor(205, 210, 218, int(120 * k)))
-        g.setColorAt(0.7, QColor(120, 125, 133, 0))
+        k = 0.55 + 0.45 * self._intensity
+        g = QRadialGradient(cx + Rs * 0.04, cy + Rs * 0.44, Rs * 0.62)
+        g.setColorAt(0.0, QColor(252, 253, 255, int(245 * k)))
+        g.setColorAt(0.22, QColor(214, 219, 227, int(150 * k)))
+        g.setColorAt(0.6, QColor(120, 125, 133, 0))
         g.setColorAt(1.0, QColor(0, 0, 0, 0))
         p.setPen(Qt.NoPen); p.setBrush(g); p.drawPath(sphere)
         p.restore()
 
     def _ripples(self, p, cx, cy, Rs, sphere):
         p.save(); p.setClipPath(sphere)
-        lines = 7
-        drift = math.sin(self._phase * 0.5) * Rs * 0.035
+        lines = 5
+        drift = math.sin(self._phase * 0.5) * Rs * 0.03
         for i in range(lines):
-            fy = -0.10 + (i / (lines - 1)) * 0.60
+            fy = 0.02 + (i / (lines - 1)) * 0.52
             yc = cy + fy * Rs + drift
             fade = 1 - max(0.0, fy) * 0.5
-            amp = Rs * (0.035 + 0.07 * self._intensity) * fade
-            alpha = int(255 * (0.028 + 0.05 * fade))
-            pen = QPen(QColor(230, 234, 240, max(7, alpha)))
-            pen.setWidthF(1.5); pen.setCapStyle(Qt.RoundCap); p.setPen(pen)
+            amp = Rs * (0.025 + 0.055 * self._intensity) * fade
+            alpha = int(255 * (0.018 + 0.035 * fade))
+            pen = QPen(QColor(232, 236, 242, max(5, alpha)))
+            pen.setWidthF(1.3); pen.setCapStyle(Qt.RoundCap); p.setPen(pen)
             path = QPainterPath(); steps = 90
             for s in range(steps + 1):
                 t = s / steps
